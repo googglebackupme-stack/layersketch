@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>LayerSketch Studio</title>
+  <link rel="stylesheet" href="studio.css">
+</head>
+<body>
+  <div id="app-container">
+    <!-- Top Toolbar -->
+    <header id="top-toolbar">
+      <div class="toolbar-group">
+        <div class="brand-badge">
+          <div class="brand-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+              <polyline points="2 17 12 22 22 17"></polyline>
+              <polyline points="2 12 12 17 22 12"></polyline>
+            </svg>
+          </div>
+          <span>Sketchbook</span>
+        </div>
+
+        <button class="btn-sm" id="btn-new-project" title="New Canvas">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          New
+        </button>
+        <button class="btn-sm" id="btn-save-project" title="Save Project (Ctrl+S)">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>
+          Save
+        </button>
+
+        <div style="width: 1px; height: 18px; background: var(--border-subtle); margin: 0 2px;"></div>
+
+        <button class="btn-icon" id="btn-undo" title="Undo (Ctrl+Z)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+        </button>
+        <button class="btn-icon" id="btn-redo" title="Redo (Ctrl+Y)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/></svg>
+        </button>
+
+        <div style="width: 1px; height: 18px; background: var(--border-subtle); margin: 0 2px;"></div>
+
+        <button class="btn-icon" id="btn-zoom-fit" title="Fit to Screen">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        </button>
+        <button class="btn-icon" id="btn-toggle-grid" title="Toggle Grid & Guides">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>
+        </button>
+        <button class="btn-icon" id="btn-clear-canvas" title="Clear Active Layer">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
+      </div>
+
+      <!-- Center: Project Title and Status -->
+      <div class="toolbar-group">
+        <div class="project-title-wrapper">
+          <input type="text" id="project-title" class="project-title-input" value="Sketchbook Studio" />
+          <div class="status-indicator">
+            <span class="status-dot" id="status-dot"></span>
+            <span id="status-text">Ready</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Action Group -->
+      <div class="toolbar-group">
+        <button class="btn-sm btn-record-target" id="btn-open-recorder" title="Open Layer Recording Studio">
+          <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--recording-red);"></span>
+          <span>Record Studio</span>
+          <span id="rec-target-label" style="font-size:10px; background:rgba(0,0,0,0.3); padding:1px 4px; border-radius:3px;">Layer 3</span>
+        </button>
+
+        <button class="btn-sm btn-primary" id="btn-quick-record" title="Quick Record Target Layer Video">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
+          Record Layer
+        </button>
+
+        <button class="btn-sm" id="btn-export-menu" title="Export Formats">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export
+        </button>
+
+        <button class="btn-icon" id="btn-open-settings" title="Settings">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Sketchbook Horizontal Pencil Rack (4H to 9B) -->
+    <div id="pencil-rack-bar">
+      <div class="rack-title-badge">
+        <span>✏️ PENCILS</span>
+      </div>
+      <!-- 15 Pencils: 4H, 3H, 2H, H, F, HB, B, 2B, 3B, 4B, 5B, 6B, 7B, 8B, 9B -->
+      <div class="pencil-chip hardness-h" data-pencil="4H" title="4H: Extra Hard & Light Graphite">
+        <span class="pencil-lead-dot" style="background:#7a828e;"></span>
+        <span class="pencil-grade-code">4H</span>
+      </div>
+      <div class="pencil-chip hardness-h" data-pencil="3H" title="3H: Very Hard Graphite">
+        <span class="pencil-lead-dot" style="background:#6c7582;"></span>
+        <span class="pencil-grade-code">3H</span>
+      </div>
+      <div class="pencil-chip hardness-h" data-pencil="2H" title="2H: Hard Technical Graphite">
+        <span class="pencil-lead-dot" style="background:#5e6774;"></span>
+        <span class="pencil-grade-code">2H</span>
+      </div>
+      <div class="pencil-chip hardness-h" data-pencil="H" title="H: Medium-Hard Graphite">
+        <span class="pencil-lead-dot" style="background:#505966;"></span>
+        <span class="pencil-grade-code">H</span>
+      </div>
+      <div class="pencil-chip hardness-h" data-pencil="F" title="F: Firm Fine Point">
+        <span class="pencil-lead-dot" style="background:#444d5a;"></span>
+        <span class="pencil-grade-code">F</span>
+      </div>
+      <div class="pencil-chip hardness-hb" data-pencil="HB" title="HB: Standard Balanced Pencil">
+        <span class="pencil-lead-dot" style="background:#38404d;"></span>
+        <span class="pencil-grade-code">HB</span>
+      </div>
+      <div class="pencil-chip hardness-b" data-pencil="B" title="B: Soft Warm Graphite">
+        <span class="pencil-lead-dot" style="background:#2c333f;"></span>
+        <span class="pencil-grade-code">B</span>
+      </div>
+      <div class="pencil-chip hardness-b active" data-pencil="2B" title="2B: Soft Dark Shading Pencil">
+        <span class="pencil-lead-dot" style="background:#222833;"></span>
+        <span class="pencil-grade-code">2B</span>
+      </div>
+      <div class="pencil-chip hardness-b" data-pencil="3B" title="3B: Very Soft Graphite">
+        <span class="pencil-lead-dot" style="background:#1a1f28;"></span>
+        <span class="pencil-grade-code">3B</span>
+      </div>
+      <div class="pencil-chip hardness-b" data-pencil="4B" title="4B: Extra Soft Carbon Graphite">
+        <span class="pencil-lead-dot" style="background:#141820;"></span>
+        <span class="pencil-grade-code">4B</span>
+      </div>
+      <div class="pencil-chip hardness-b" data-pencil="5B" title="5B: Dense Velvet Dark">
+        <span class="pencil-lead-dot" style="background:#10131a;"></span>
+        <span class="pencil-grade-code">5B</span>
+      </div>
+      <div class="pencil-chip hardness-b" data-pencil="6B" title="6B: Deep Charcoal Black">
+        <span class="pencil-lead-dot" style="background:#0c0f15;"></span>
+        <span class="pencil-grade-code">6B</span>
+      </div>
+      <div class="pencil-chip hardness-b" data-pencil="7B" title="7B: Intense Smoky Graphite">
+        <span class="pencil-lead-dot" style="background:#080a0e;"></span>
+        <span class="pencil-grade-code">7B</span>
+      </div>
+      <div class="pencil-chip hardness-b" data-pencil="8B" title="8B: Ultra Soft Matte Graphite">
+        <span class="pencil-lead-dot" style="background:#050608;"></span>
+        <span class="pencil-grade-code">8B</span>
+      </div>
+      <div class="pencil-chip hardness-b" data-pencil="9B" title="9B: Maximum Dark Velvety Lead">
+        <span class="pencil-lead-dot" style="background:#020304;"></span>
+        <span class="pencil-grade-code">9B</span>
+      </div>
+
+      <div style="width: 1px; height: 24px; background: var(--border-subtle); margin: 0 4px;"></div>
+      <!-- Color Picker Quick Swatch -->
+      <div style="display:flex; align-items:center; gap:4px;">
+        <span style="font-size:10px; color:var(--text-muted);">Color:</span>
+        <input type="color" id="quick-brush-color" value="#222833" style="width:24px; height:24px; border:none; border-radius:50%; cursor:pointer; background:none;" />
+      </div>
+    </div>
+
+    <!-- Workspace Body -->
+    <div id="workspace-body">
+      <!-- Left Tool Panel -->
+      <nav id="left-tool-panel">
+        <button class="tool-btn active" data-tool="brush" title="Pencil / Brush (B)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+          <span class="tool-badge">B</span>
+        </button>
+        <button class="tool-btn" data-tool="eraser" title="Eraser (E)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>
+          <span class="tool-badge">E</span>
+        </button>
+        <button class="tool-btn" data-tool="select" title="Select & Transform (V)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7 18 3-7 7-3L3 3z"/></svg>
+          <span class="tool-badge">V</span>
+        </button>
+        <button class="tool-btn" data-tool="pan" title="Hand / Pan (H)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>
+          <span class="tool-badge">H</span>
+        </button>
+        <button class="tool-btn" data-tool="shape" title="Shapes (U)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+          <span class="tool-badge">U</span>
+        </button>
+        <button class="tool-btn" data-tool="text" title="Text Layer (T)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+          <span class="tool-badge">T</span>
+        </button>
+        <button class="tool-btn" id="btn-tool-import-image" title="Import Image (I)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <span class="tool-badge">I</span>
+        </button>
+      </nav>
+
+      <!-- Canvas Viewport -->
+      <main id="canvas-viewport-container">
+        <!-- Interactive Canvas Stage (Physical Sketchbook Page) -->
+        <div id="canvas-stage">
+          <canvas id="main-display-canvas"></canvas>
+          <!-- Transform Gizmo Overlay -->
+          <div id="transform-gizmo">
+            <div class="gizmo-rot-line"></div>
+            <div class="gizmo-handle rot" title="Rotate"></div>
+            <div class="gizmo-handle tl" data-handle="tl"></div>
+            <div class="gizmo-handle tr" data-handle="tr"></div>
+            <div class="gizmo-handle bl" data-handle="bl"></div>
+            <div class="gizmo-handle br" data-handle="br"></div>
+          </div>
+        </div>
+
+        <!-- Autodesk Sketchbook Floating Brush Puck -->
+        <div id="sketchbook-puck" title="Sketchbook Brush Puck (Drag to adjust Size/Opacity)">
+          <div class="puck-inner-dot" id="puck-dot"></div>
+          <span class="puck-label" id="puck-pencil-label">2B</span>
+        </div>
+
+        <!-- Floating Viewport Controls -->
+        <div id="viewport-controls">
+          <span id="zoom-level-text" style="font-size: 11px; font-weight: 700; color: var(--accent-cyan);">100%</span>
+          <span id="viewport-dims" style="font-size: 11px; color: var(--text-muted);">1080 × 1080</span>
+          <div style="width: 1px; height: 12px; background: var(--border-subtle);"></div>
+          <!-- Artboard switcher -->
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <span style="font-size: 11px; color: var(--text-muted);">Page:</span>
+            <div id="pages-pill-container" style="display: flex; gap: 4px;">
+              <span class="page-indicator-pill" data-page="0">01</span>
+            </div>
+            <button class="btn-icon" id="btn-add-page" style="width: 20px; height: 20px;" title="Add Page">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+          </div>
+        </div>
+      </main>
+
+      <!-- Right Dock (Layers & Properties) -->
+      <aside id="right-dock">
+        <div class="dock-tabs">
+          <button class="dock-tab-btn active" data-tab="layers">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+            Layers
+          </button>
+          <button class="dock-tab-btn" data-tab="properties">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Properties
+          </button>
+        </div>
+
+        <div class="dock-content">
+          <!-- Layers Tab Content -->
+          <div id="layers-tab-pane" style="display: flex; flex-direction: column; height: 100%;">
+            <div class="layer-toolbar">
+              <div class="layer-actions-group">
+                <button class="btn-icon" id="btn-add-drawing-layer" title="New Drawing Layer">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/></svg>
+                </button>
+                <button class="btn-icon" id="btn-add-text-layer" title="New Text Layer">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+                </button>
+                <button class="btn-icon" id="btn-add-shape-layer" title="New Shape Layer">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                </button>
+              </div>
+
+              <div class="layer-actions-group">
+                <button class="btn-icon" id="btn-duplicate-layer" title="Duplicate Layer">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                </button>
+                <button class="btn-icon" id="btn-delete-layer" title="Delete Layer">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div id="layer-list-container">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+
+          <!-- Properties Tab Content -->
+          <div id="properties-tab-pane" class="properties-pane" style="display: none;">
+            <div class="prop-section">
+              <span class="prop-section-title">Transform</span>
+              <div class="prop-grid-2">
+                <div class="prop-input-wrap">
+                  <span class="prop-label">X</span>
+                  <input type="number" id="prop-x" class="prop-input" />
+                </div>
+                <div class="prop-input-wrap">
+                  <span class="prop-label">Y</span>
+                  <input type="number" id="prop-y" class="prop-input" />
+                </div>
+                <div class="prop-input-wrap">
+                  <span class="prop-label">W</span>
+                  <input type="number" id="prop-w" class="prop-input" />
+                </div>
+                <div class="prop-input-wrap">
+                  <span class="prop-label">H</span>
+                  <input type="number" id="prop-h" class="prop-input" />
+                </div>
+              </div>
+            </div>
+
+            <div class="prop-section">
+              <span class="prop-section-title">Appearance</span>
+              <div class="prop-grid-2">
+                <div class="prop-input-wrap">
+                  <span class="prop-label">Rot°</span>
+                  <input type="number" id="prop-rot" class="prop-input" />
+                </div>
+                <div class="prop-input-wrap">
+                  <span class="prop-label">Op%</span>
+                  <input type="number" id="prop-opacity" class="prop-input" min="0" max="100" />
+                </div>
+              </div>
+              <div style="margin-top: 6px;">
+                <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px;">Blend Mode:</label>
+                <select id="prop-blend-mode" class="prop-select">
+                  <option value="source-over">Normal</option>
+                  <option value="multiply">Multiply</option>
+                  <option value="screen">Screen</option>
+                  <option value="overlay">Overlay</option>
+                </select>
+              </div>
+            </div>
+
+            <div id="type-specific-properties" class="prop-section">
+              <!-- Dynamically populated -->
+            </div>
+
+            <div class="prop-section" style="margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border-subtle);">
+              <button class="btn-sm btn-record-target" id="btn-set-as-rec-target" style="width: 100%; justify-content: center;">
+                <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--recording-red);"></span>
+                Set as Isolated Recording Target
+              </button>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Bottom Timeline & Recording Panel -->
+    <footer id="bottom-panel">
+      <div class="timeline-header-bar">
+        <div class="timeline-controls-left">
+          <button class="btn-icon" id="btn-timeline-toggle" title="Collapse / Expand Timeline">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <button class="btn-icon" id="btn-play-pause" title="Play / Pause Animation">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          </button>
+          <button class="btn-icon" id="btn-stop-timeline" title="Stop & Rewind">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+          </button>
+          <div class="timecode-display" id="timeline-timecode">00:00.00 / 00:05.00</div>
+          
+          <button class="btn-sm" id="btn-add-keyframe" title="Add Keyframe at Current Time">
+            <span style="display:inline-block; width:8px; height:8px; background:var(--accent-cyan); transform:rotate(45deg);"></span>
+            + Keyframe
+          </button>
+        </div>
+
+        <div class="toolbar-group">
+          <span style="font-size: 11px; font-weight: 600; color: #f87171; background: rgba(239, 68, 68, 0.15); padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(239, 68, 68, 0.3);">
+            ● Isolated Recording Target Ready
+          </span>
+          <button class="btn-sm btn-primary" id="btn-timeline-rec-now">
+            Record Target Layer
+          </button>
+        </div>
+      </div>
+
+      <div class="timeline-body">
+        <div class="timeline-labels-column" id="timeline-labels-column">
+          <!-- Dynamically populated -->
+        </div>
+        <div class="timeline-tracks-viewport" id="timeline-tracks-viewport">
+          <div class="timeline-ruler-track" id="timeline-ruler">
+            <!-- Ticks -->
+          </div>
+          <div id="timeline-tracks-container">
+            <!-- Tracks -->
+          </div>
+          <div id="timeline-playhead">
+            <div id="timeline-playhead-cap"></div>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <!-- Recording Studio Modal -->
+    <div class="modal-overlay" id="recording-studio-modal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">
+            <span style="width: 10px; height: 10px; border-radius: 50%; background: var(--recording-red); display: inline-block;"></span>
+            Layer Recording Studio
+          </div>
+          <button class="btn-icon" id="btn-close-recorder">✕</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="isolated-recording-banner">
+            <div class="banner-headline">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              Isolated Single-Layer Canvas Recording
+            </div>
+            <div class="banner-desc">
+              Renders <strong>ONLY the target layer into an isolated offscreen canvas</strong> and records it using MediaRecorder. All other background, sketch, or text layers are <em>completely excluded</em> from the exported video.
+            </div>
+          </div>
+
+          <div class="prop-grid-2">
+            <div>
+              <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px;">Recording Target Layer:</label>
+              <select id="modal-rec-layer-select" class="prop-select"></select>
+            </div>
+            <div>
+              <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px;">Resolution / Bounds:</label>
+              <select id="modal-rec-bounds-select" class="prop-select">
+                <option value="layer">Target Layer Bounds (Cropped)</option>
+                <option value="canvas">Full Canvas Size</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="prop-grid-2">
+            <div>
+              <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px;">Frame Rate (FPS):</label>
+              <select id="modal-rec-fps-select" class="prop-select">
+                <option value="30">30 FPS</option>
+                <option value="60">60 FPS</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px;">Background:</label>
+              <select id="modal-rec-bg-select" class="prop-select">
+                <option value="transparent">Transparent (WebM)</option>
+                <option value="#ffffff">Paper White (#ffffff)</option>
+                <option value="#12161f">Dark Studio (#12161f)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Isolated Preview Stage -->
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <span style="font-size: 11px; font-weight: 600; color: var(--text-muted);">LIVE ISOLATED PREVIEW:</span>
+            </div>
+            <div class="preview-stage-wrap canvas-checkerboard">
+              <canvas id="isolated-preview-canvas"></canvas>
+              <div id="recording-active-badge" class="recording-badge-floating" style="display: none;">
+                <span style="width: 8px; height: 8px; border-radius: 50%; background: #fff;"></span>
+                <span>RECORDING IN PROGRESS...</span>
+                <span id="recording-timer">00:00</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn-sm" id="btn-cancel-recording-modal">Close</button>
+          <button class="btn-sm btn-record-target" id="btn-start-isolated-record">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
+            Start Isolated Recording
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export Result Modal -->
+    <div class="modal-overlay" id="export-result-modal">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title">Recording Export Complete!</div>
+          <button class="btn-icon" id="btn-close-export-result">✕</button>
+        </div>
+        <div class="modal-body">
+          <div style="background: #000; border-radius: 8px; overflow: hidden; display: flex; justify-content: center; max-height: 260px;">
+            <video id="exported-video-player" controls autoplay loop style="max-width: 100%; max-height: 260px;"></video>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted);">
+            <span id="export-meta-format">Format: WebM</span>
+            <span id="export-meta-size">Size: Calculating...</span>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-sm" id="btn-export-share">Share Video</button>
+          <button class="btn-sm btn-primary" id="btn-export-download">Download Video (.webm)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay" id="project-settings-modal">
+      <div class="modal-card" style="max-width: 440px;">
+        <div class="modal-header">
+          <div class="modal-title">Canvas Settings</div>
+          <button class="btn-icon" id="btn-close-settings">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="prop-grid-2">
+            <div>
+              <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px;">Width:</label>
+              <input type="number" id="settings-canvas-w" class="prop-input-wrap prop-input" value="1080" />
+            </div>
+            <div>
+              <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px;">Height:</label>
+              <input type="number" id="settings-canvas-h" class="prop-input-wrap prop-input" value="1080" />
+            </div>
+          </div>
+          <div>
+            <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px;">Canvas Background:</label>
+            <select id="settings-canvas-bg" class="prop-select">
+              <option value="#ffffff">Crisp White Paper (#ffffff)</option>
+              <option value="#fcfbf7">Warm Sketchbook Cream (#fcfbf7)</option>
+              <option value="transparent">Transparent (Checkerboard)</option>
+              <option value="#12161f">Dark Charcoal Studio (#12161f)</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-sm btn-primary" id="btn-apply-settings">Apply</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export Dropdown -->
+    <div class="context-menu" id="export-dropdown-menu">
+      <div class="context-menu-item" data-export="isolated-video">
+        <span style="color:var(--recording-red);">●</span> Record / Export Target Layer Video
+      </div>
+      <div class="context-menu-item" data-export="full-video">
+        Record / Export Full Composition Video
+      </div>
+      <div class="context-menu-separator"></div>
+      <div class="context-menu-item" data-export="comp-png">
+        Export Artwork as PNG
+      </div>
+      <div class="context-menu-item" data-export="layer-png">
+        Export Isolated Layer as PNG
+      </div>
+    </div>
+
+    <!-- Hidden File Inputs -->
+    <input type="file" id="file-input-image" accept="image/*" style="display: none;" />
+    <input type="file" id="file-input-project" accept=".json,application/json" style="display: none;" />
+
+    <div id="toast-container"></div>
+  </div>
+
+  <script src="studio.js"></script>
+</body>
+</html>
