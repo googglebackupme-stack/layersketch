@@ -54,7 +54,12 @@ fun StudioToolDock(
   onOpenColorWheel: () -> Unit,
   isRecording: Boolean,
   targetLayerName: String,
-  onToggleRecord: () -> Unit
+  onToggleRecord: () -> Unit,
+  isLayerPanelOpen: Boolean = false,
+  layersCount: Int = 1,
+  onToggleLayers: () -> Unit = {},
+  onUndo: () -> Unit = {},
+  onUndoLongClick: () -> Unit = {}
 ) {
   val pencilScrollState = rememberScrollState()
 
@@ -84,27 +89,169 @@ fun StudioToolDock(
       .border(0.5.dp, Color(0xFFCBD5E1))
       .padding(horizontal = 6.dp, vertical = 5.dp)
   ) {
-    // ROW 1: Main Tool Selector Tabs (পেন্সিল, মুছনি, নাড়ানো/মুভ, কলম, মার্কার, কালার, রেকর্ড)
+    // ROW 1: Main Tool Selector Tabs (লেয়ার, পেন্সিল, টেক পেন, ব্রাশ পেন, চারকোল, ব্লেন্ডার, মার্কার, মুছনি, নাড়ানো, কালার, রেকর্ড)
+    val toolTabScroll = rememberScrollState()
     Row(
-      modifier = Modifier.fillMaxWidth(),
-      horizontalArrangement = Arrangement.SpaceBetween,
+      modifier = Modifier
+        .fillMaxWidth()
+        .horizontalScroll(toolTabScroll),
+      horizontalArrangement = Arrangement.spacedBy(6.dp),
       verticalAlignment = Alignment.CenterVertically
     ) {
+      // 0. Dedicated Layer Tool Button (লেয়ার অপশন - মোবাইলে সবসময় এক ক্লিকেই লেয়ার বের করার জন্য)
+      ToolTabButton(
+        title = "লেয়ার ($layersCount)",
+        icon = "📑",
+        isSelected = isLayerPanelOpen,
+        activeColor = Color(0xFF007ACC),
+        onClick = onToggleLayers
+      )
+
       // 1. Pencil Tool (পেন্সিল)
       ToolTabButton(
         title = "পেন্সিল (${activePencil.code})",
         icon = "✏️",
-        isSelected = !isEraser && !isPanMode && activePencil.code != "PEN" && activePencil.code != "MARKER",
+        isSelected = !isEraser && !isPanMode && activePencil.toolType == com.example.model.DrawingToolType.PENCIL,
         onClick = {
           onTogglePanMode(false)
           onToggleEraser(false)
-          if (activePencil.code == "PEN" || activePencil.code == "MARKER") {
+          if (activePencil.toolType != com.example.model.DrawingToolType.PENCIL) {
             onSelectPencil(PencilPalette.getGrade("2B"))
           }
         }
       )
 
-      // 2. Dedicated Eraser Tool (মুছনি: স্ট্রোক মুছে ফেলে, সাদা নয়!)
+      // 2. Technical Inking Pen (০.৩মিমি ফাইন পেন - চোখ, ঠোঁট ও আউটলাইনের জন্য)
+      ToolTabButton(
+        title = "টেক পেন (০.৩মিমি)",
+        icon = "🖋️",
+        isSelected = !isEraser && !isPanMode && activePencil.code == "TECH_PEN",
+        activeColor = Color(0xFF0284C7),
+        onClick = {
+          onTogglePanMode(false)
+          onToggleEraser(false)
+          onSelectPencil(PencilPalette.TECH_PEN)
+        }
+      )
+
+      // 3. Hair Brush Pen (ব্রাশ কলম - চুলের বাঁক ও ফ্লোয়িং স্ট্রোক)
+      ToolTabButton(
+        title = "ব্রাশ কলম",
+        icon = "🖌️",
+        isSelected = !isEraser && !isPanMode && activePencil.code == "BRUSH_PEN",
+        activeColor = Color(0xFF16A34A),
+        onClick = {
+          onTogglePanMode(false)
+          onToggleEraser(false)
+          onSelectPencil(PencilPalette.BRUSH_PEN)
+        }
+      )
+
+      // 4. Charcoal Pencil (চারকোল পেন্সিল - গাঢ় চুলের শেডিং ও কালো ডার্কনেস)
+      ToolTabButton(
+        title = "চারকোল",
+        icon = "🖤",
+        isSelected = !isEraser && !isPanMode && activePencil.code == "CHARCOAL",
+        activeColor = Color(0xFF1E293B),
+        onClick = {
+          onTogglePanMode(false)
+          onToggleEraser(false)
+          onSelectPencil(PencilPalette.CHARCOAL)
+        }
+      )
+
+      // 5. Blending Stump (ব্লেন্ডিং স্টাম্প - স্মুথ স্কিন ও ফেস শ্যাডো)
+      ToolTabButton(
+        title = "ব্লেন্ডার",
+        icon = "🌫️",
+        isSelected = !isEraser && !isPanMode && activePencil.code == "BLENDER",
+        activeColor = Color(0xFF64748B),
+        onClick = {
+          onTogglePanMode(false)
+          onToggleEraser(false)
+          onSelectPencil(PencilPalette.BLENDER)
+        }
+      )
+
+      // 5b. Hair & Lash Pen (হেয়ার ও ল্যাশ পেন - ০.১৫মিমি)
+      ToolTabButton(
+        title = "হেয়ার পেন",
+        icon = "🪮",
+        isSelected = !isEraser && !isPanMode && activePencil.code == "HAIR_PEN",
+        activeColor = Color(0xFF0F172A),
+        onClick = {
+          onTogglePanMode(false)
+          onToggleEraser(false)
+          onSelectPencil(PencilPalette.HAIR_PEN)
+        }
+      )
+
+      // 5c. White Gel Highlight Pen (হোয়াইট জেল পেন - চোখ ও ঠোঁটের হাইলাইট)
+      ToolTabButton(
+        title = "হোয়াইট জেল",
+        icon = "🌟",
+        isSelected = !isEraser && !isPanMode && activePencil.code == "HIGHLIGHT_PEN",
+        activeColor = Color(0xFF0284C7),
+        onClick = {
+          onTogglePanMode(false)
+          onToggleEraser(false)
+          onSelectPencil(PencilPalette.HIGHLIGHT_PEN)
+        }
+      )
+
+      // 5d. Watercolor Wash Brush (ওয়াটারকালার ব্রাশ)
+      ToolTabButton(
+        title = "ওয়াটারকালার",
+        icon = "🎨",
+        isSelected = !isEraser && !isPanMode && activePencil.code == "WATERCOLOR",
+        activeColor = Color(0xFFE11D48),
+        onClick = {
+          onTogglePanMode(false)
+          onToggleEraser(false)
+          onSelectPencil(PencilPalette.WATERCOLOR)
+        }
+      )
+
+      // 5e. Soft Airbrush (সফট এয়ারব্রাশ - স্কিন শেডিং)
+      ToolTabButton(
+        title = "এয়ারব্রাশ",
+        icon = "💨",
+        isSelected = !isEraser && !isPanMode && activePencil.code == "AIRBRUSH",
+        activeColor = Color(0xFF8B5CF6),
+        onClick = {
+          onTogglePanMode(false)
+          onToggleEraser(false)
+          onSelectPencil(PencilPalette.AIRBRUSH)
+        }
+      )
+
+      // 5f. G-Pen / Dip Pen (জি-পেন / ডিপ কলম)
+      ToolTabButton(
+        title = "জি-পেন",
+        icon = "✒️",
+        isSelected = !isEraser && !isPanMode && activePencil.code == "DIP_PEN",
+        activeColor = Color(0xFF1E293B),
+        onClick = {
+          onTogglePanMode(false)
+          onToggleEraser(false)
+          onSelectPencil(PencilPalette.DIP_PEN)
+        }
+      )
+
+      // 5g. Hatching Pencil (হ্যাচিং শেডিং পেন্সিল)
+      ToolTabButton(
+        title = "হ্যাচিং",
+        icon = "📐",
+        isSelected = !isEraser && !isPanMode && activePencil.code == "HATCHING",
+        activeColor = Color(0xFF475569),
+        onClick = {
+          onTogglePanMode(false)
+          onToggleEraser(false)
+          onSelectPencil(PencilPalette.HATCHING)
+        }
+      )
+
+      // 6. Dedicated Eraser Tool (মুছনি)
       ToolTabButton(
         title = "মুছনি",
         icon = "🧼",
@@ -116,7 +263,16 @@ fun StudioToolDock(
         }
       )
 
-      // 3. Move / Pan Canvas Tool (ক্যানভাস নাড়ানো)
+      // 6.1 Quick Undo Button (আনডু - পূর্ববর্তী স্ট্রোক মোছা)
+      ToolTabButton(
+        title = "আনডু",
+        icon = "↩️",
+        isSelected = false,
+        activeColor = Color(0xFF0284C7),
+        onClick = onUndo
+      )
+
+      // 7. Move / Pan Canvas Tool (ক্যানভাস নাড়ানো)
       ToolTabButton(
         title = "নাড়ানো",
         icon = "✋",
@@ -125,19 +281,7 @@ fun StudioToolDock(
         onClick = { onTogglePanMode(!isPanMode) }
       )
 
-      // 4. Inking Pen (কলম)
-      ToolTabButton(
-        title = "কলম",
-        icon = "🖋️",
-        isSelected = !isEraser && !isPanMode && activePencil.code == "PEN",
-        onClick = {
-          onTogglePanMode(false)
-          onToggleEraser(false)
-          onSelectPencil(PencilPalette.PEN)
-        }
-      )
-
-      // 5. Marker (মার্কার)
+      // 8. Chisel Marker (মার্কার)
       ToolTabButton(
         title = "মার্কার",
         icon = "🖍️",
@@ -149,7 +293,7 @@ fun StudioToolDock(
         }
       )
 
-      // 6. Hand Color Picker
+      // 9. Hand Color Picker
       Box(
         modifier = Modifier
           .height(34.dp)
@@ -157,7 +301,7 @@ fun StudioToolDock(
           .background(Color(0xFFF1F5F9))
           .border(1.dp, Color(0xFFCBD5E1), RoundedCornerShape(17.dp))
           .clickable(onClick = onOpenColorWheel)
-          .padding(horizontal = 7.dp),
+          .padding(horizontal = 8.dp),
         contentAlignment = Alignment.Center
       ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -184,7 +328,7 @@ fun StudioToolDock(
         }
       }
 
-      // 7. Record Layer Button
+      // 10. Record Layer Button
       Box(
         modifier = Modifier
           .height(34.dp)
@@ -192,7 +336,7 @@ fun StudioToolDock(
           .background(if (isRecording) Color(0xFFDC2626) else Color(0xFFFEE2E2))
           .border(1.dp, Color(0xFFEF4444), RoundedCornerShape(17.dp))
           .clickable(onClick = onToggleRecord)
-          .padding(horizontal = 7.dp),
+          .padding(horizontal = 8.dp),
         contentAlignment = Alignment.Center
       ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {

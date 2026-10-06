@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChangeHistory
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.FormatColorFill
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.OpenWith
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material.icons.filled.TextFields
@@ -45,7 +46,9 @@ fun ToolsMenuDialog(
   onAddTextClick: () -> Unit,
   onAddShapeClick: () -> Unit,
   onAddPhotoClick: () -> Unit,
-  onTransformPhotoClick: () -> Unit
+  onTransformPhotoClick: () -> Unit,
+  onOpenCanvasSetup: () -> Unit = {},
+  onOpenLayers: () -> Unit = {}
 ) {
   Dialog(onDismissRequest = onDismiss) {
     Column(
@@ -66,14 +69,17 @@ fun ToolsMenuDialog(
         Text("✕", fontSize = 16.sp, color = Color(0xFF94A3B8), modifier = Modifier.clickable(onClick = onDismiss).padding(4.dp))
       }
 
-      // Row 1: Selection, Transform, Fill
+      // Row 1: Selection, Transform, Canvas Setup
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         ToolGridItem("সিলেকশন", Icons.Default.Crop) { onDismiss() }
         ToolGridItem("ছবি ট্রান্সফর্ম", Icons.Default.OpenWith) {
           onTransformPhotoClick()
           onDismiss()
         }
-        ToolGridItem("কালার ফিল", Icons.Default.FormatColorFill) { onDismiss() }
+        ToolGridItem("ক্যানভাস রঙ ও ব্যাকগ্রাউন্ড", Icons.Default.FormatColorFill, isHighlight = true) {
+          onOpenCanvasSetup()
+          onDismiss()
+        }
       }
 
       // Row 2: Guides, Symmetry, Draw Styles (Shapes)
@@ -99,7 +105,7 @@ fun ToolsMenuDialog(
         }
       }
 
-      // Row 4: Clear Canvas, Time-lapse / Record, Auto Hide
+      // Row 4: Clear Canvas, Time-lapse / Record, Layers
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         ToolGridItem("ক্লিয়ার লেয়ার", Icons.Default.Crop) {
           onClearClick()
@@ -109,7 +115,10 @@ fun ToolsMenuDialog(
           onRecordClick()
           onDismiss()
         }
-        ToolGridItem("হাইড প্যানেল", Icons.Default.VisibilityOff) { onDismiss() }
+        ToolGridItem("লেয়ারসমূহ\n(Layers)", Icons.Default.Layers, isHighlight = true) {
+          onOpenLayers()
+          onDismiss()
+        }
       }
     }
   }

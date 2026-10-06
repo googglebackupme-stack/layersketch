@@ -1,5 +1,5 @@
 {
-  "name": "LayerSketch Studio",
+  "name": "mahfujdrawing",
   "description": "Layer-based digital sketchbook, animation workspace, and isolated layer recording studio",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

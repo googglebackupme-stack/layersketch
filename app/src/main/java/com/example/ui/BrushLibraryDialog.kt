@@ -176,6 +176,159 @@ fun BrushLibraryDialog(
             .padding(12.dp),
           verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+          // --- PORTRAIT & SKETCHING SECTION (Inspired by Image 1: Pen, Brush Pen, Charcoal, Blender) ---
+          item {
+            Text(
+              text = "Portrait & Sketch Tools (পোর্ট্রেট ও স্কেচ টুলস)",
+              fontSize = 13.sp,
+              fontWeight = FontWeight.Bold,
+              color = Color(0xFF007ACC),
+              modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+              ) {
+                // Technical Pen (০.৩ মিমি ফাইন কলম)
+                BrushItemCard(
+                  name = "Technical Pen (০.৩মিমি)",
+                  badge = "0.3mm",
+                  iconText = "🖋️",
+                  isSelected = !isEraser && activePencil.code == "TECH_PEN",
+                  badgeColor = Color(0xFF0284C7),
+                  onClick = { onSelectPencil(PencilPalette.TECH_PEN) }
+                )
+
+                // Calligraphy / Hair Brush Pen (ব্রাশ কলম)
+                BrushItemCard(
+                  name = "Hair Brush (ব্রাশ কলম)",
+                  badge = "BRUSH",
+                  iconText = "🖌️",
+                  isSelected = !isEraser && activePencil.code == "BRUSH_PEN",
+                  badgeColor = Color(0xFF16A34A),
+                  onClick = { onSelectPencil(PencilPalette.BRUSH_PEN) }
+                )
+
+                // Charcoal Pencil (চারকোল পেন্সিল)
+                BrushItemCard(
+                  name = "Charcoal (চারকোল)",
+                  badge = "CARBON",
+                  iconText = "🖤",
+                  isSelected = !isEraser && activePencil.code == "CHARCOAL",
+                  badgeColor = Color(0xFF1E293B),
+                  onClick = { onSelectPencil(PencilPalette.CHARCOAL) }
+                )
+              }
+
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+              ) {
+                // Blending Stump (ব্লেন্ডিং স্টাম্প)
+                BrushItemCard(
+                  name = "Blending Stump (শ্যাডো)",
+                  badge = "BLEND",
+                  iconText = "🌫️",
+                  isSelected = !isEraser && activePencil.code == "BLENDER",
+                  badgeColor = Color(0xFF64748B),
+                  onClick = { onSelectPencil(PencilPalette.BLENDER) }
+                )
+
+                // Kneaded Highlight Eraser (হাইলাইট ইরেজার)
+                BrushItemCard(
+                  name = "Kneaded (হাইলাইট)",
+                  badge = "LIGHT",
+                  iconText = "✨",
+                  isSelected = isEraser && activePencil.code == "KNEADED",
+                  badgeColor = Color(0xFFF59E0B),
+                  onClick = { onSelectPencil(PencilPalette.KNEADED_ERASER) }
+                )
+
+                // 2B Artist Standard Pencil
+                BrushItemCard(
+                  name = "2B Pencil (স্কেচ)",
+                  badge = "2B ART",
+                  iconText = "✏️",
+                  isSelected = !isEraser && activePencil.code == "2B",
+                  badgeColor = Color(0xFF334155),
+                  onClick = { onSelectPencil(PencilPalette.getGrade("2B")) }
+                )
+              }
+
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+              ) {
+                // Hair & Lash Pen (০.১৫ মিমি হেয়ার ও ল্যাশ পেন)
+                BrushItemCard(
+                  name = "Hair Pen (০.১৫মিমি)",
+                  badge = "HAIR",
+                  iconText = "🪮",
+                  isSelected = !isEraser && activePencil.code == "HAIR_PEN",
+                  badgeColor = Color(0xFF0F172A),
+                  onClick = { onSelectPencil(PencilPalette.HAIR_PEN) }
+                )
+
+                // White Gel Highlight Pen (হোয়াইট জেল পেন)
+                BrushItemCard(
+                  name = "White Gel (হাইলাইটার)",
+                  badge = "GLOSS",
+                  iconText = "🌟",
+                  isSelected = !isEraser && activePencil.code == "HIGHLIGHT_PEN",
+                  badgeColor = Color(0xFF38BDF8),
+                  onClick = { onSelectPencil(PencilPalette.HIGHLIGHT_PEN) }
+                )
+
+                // Watercolor Brush (ওয়াটারকালার ব্রাশ)
+                BrushItemCard(
+                  name = "Watercolor (ওয়াশ)",
+                  badge = "WASH",
+                  iconText = "🎨",
+                  isSelected = !isEraser && activePencil.code == "WATERCOLOR",
+                  badgeColor = Color(0xFFE11D48),
+                  onClick = { onSelectPencil(PencilPalette.WATERCOLOR) }
+                )
+              }
+
+              Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+              ) {
+                // Soft Airbrush (সফট এয়ারব্রাশ)
+                BrushItemCard(
+                  name = "Airbrush (স্কিন শেড)",
+                  badge = "AIR",
+                  iconText = "💨",
+                  isSelected = !isEraser && activePencil.code == "AIRBRUSH",
+                  badgeColor = Color(0xFF8B5CF6),
+                  onClick = { onSelectPencil(PencilPalette.AIRBRUSH) }
+                )
+
+                // G-Pen / Dip Pen (জি-পেন / ডিপ কলম)
+                BrushItemCard(
+                  name = "G-Pen (ডিপ কলম)",
+                  badge = "MANGA",
+                  iconText = "✒️",
+                  isSelected = !isEraser && activePencil.code == "DIP_PEN",
+                  badgeColor = Color(0xFF1E293B),
+                  onClick = { onSelectPencil(PencilPalette.DIP_PEN) }
+                )
+
+                // Hatching Pencil (হ্যাচিং পেন্সিল)
+                BrushItemCard(
+                  name = "Hatching (ক্রস শেড)",
+                  badge = "HATCH",
+                  iconText = "📐",
+                  isSelected = !isEraser && activePencil.code == "HATCHING",
+                  badgeColor = Color(0xFF475569),
+                  onClick = { onSelectPencil(PencilPalette.HATCHING) }
+                )
+              }
+            }
+          }
+
           // --- TRADITIONAL SECTION (Eraser, Pen, Marker) ---
           item {
             Text(

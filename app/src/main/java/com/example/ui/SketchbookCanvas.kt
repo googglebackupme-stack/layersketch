@@ -1,12 +1,16 @@
 package com.example.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -18,21 +22,31 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CropFree
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
-import androidx.compose.material.icons.filled.Transform
+import androidx.compose.material.icons.filled.RotateRight
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material.icons.filled.ZoomOut
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -54,9 +68,11 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.CanvasSize
+import com.example.model.DrawingToolType
 import com.example.model.Layer
 import com.example.model.LayerType
 import com.example.model.PencilGrade
+import com.example.model.PencilPalette
 import com.example.model.PencilStroke
 import com.example.model.ShapeType
 import com.example.model.StrokePoint
@@ -122,14 +138,12 @@ fun screenToCanvas(
   paperWidth: Float,
   paperHeight: Float
 ): Offset {
-  // 1. Invert translation and zoom scale (pivot = 0, 0)
   val pRot = (screenPos - panOffset) / zoomScale
 
   if (rotation == 0f) {
     return pRot
   }
 
-  // 2. Invert rotation around canvas center
   val cx = paperWidth / 2f
   val cy = paperHeight / 2f
   val dx = pRot.x - cx
@@ -229,6 +243,14 @@ fun drawSingleLayerIsolated(
               size = Size(paperWidth, paperHeight),
               alpha = layerAlpha
             )
+            layer.backgroundImageBitmap?.let { bgBmp ->
+              drawScope.drawImage(
+                image = bgBmp,
+                dstOffset = IntOffset.Zero,
+                dstSize = IntSize(paperWidth.toInt(), paperHeight.toInt()),
+                alpha = layerAlpha
+              )
+            }
           }
         }
       }
@@ -237,45 +259,444 @@ fun drawSingleLayerIsolated(
 }
 
 /**
- * Sharp, authentic artist graphite pencil stroke rendering.
+ * Realistic Artist Graphite Pencil Stroke Rendering matching Image 2 & Image 1:
+ * 1. Soft graphite paper shadow / bevel under-layer (শ্যাডো ভাব)
+ * 2. Medium graphite textured body
+ * 3. Sharp dense core
+ * 4. Natural grain tooth speckles along the path
+ * 5. Special rendering for Technical Pen (0.3mm), Hair Brush Pen, Charcoal & Blending Stump
  */
 fun drawSharpPencilStroke(drawScope: DrawScope, stroke: PencilStroke, parentAlpha: Float) {
   if (stroke.points.isEmpty()) return
 
   val effectiveAlpha = (stroke.opacity * parentAlpha).coerceIn(0f, 1f)
+  val grade = PencilPalette.getGrade(stroke.pencilGrade)
+  val ptCount = stroke.points.size
 
-  if (stroke.points.size == 1) {
+  if (ptCount == 1) {
     val pt = stroke.points[0]
     val r = (stroke.width * (0.6f + pt.pressure * 0.5f)) / 2f
-    drawScope.drawCircle(
-      color = stroke.color,
-      radius = r.coerceAtLeast(0.8f),
-      center = pt.offset,
-      alpha = effectiveAlpha
-    )
+
+    if (stroke.isEraser) {
+      drawScope.drawCircle(
+        color = stroke.color,
+        radius = r.coerceAtLeast(0.8f),
+        center = pt.offset,
+        alpha = effectiveAlpha
+      )
+      return
+    }
+
+    when (grade.toolType) {
+      DrawingToolType.TECH_PEN, DrawingToolType.HAIR_PEN, DrawingToolType.DIP_PEN -> {
+        drawScope.drawCircle(
+          color = stroke.color,
+          radius = (stroke.width / 2f).coerceAtLeast(0.5f),
+          center = pt.offset,
+          alpha = effectiveAlpha
+        )
+      }
+      DrawingToolType.HIGHLIGHT_PEN -> {
+        // Bright luminous highlight dot with outer soft glow
+        drawScope.drawCircle(
+          color = Color.White.copy(alpha = (effectiveAlpha * 0.45f).coerceIn(0f, 1f)),
+          radius = (stroke.width * 1.35f).coerceAtLeast(1.5f),
+          center = pt.offset
+        )
+        drawScope.drawCircle(
+          color = Color.White,
+          radius = (stroke.width / 2f).coerceAtLeast(0.8f),
+          center = pt.offset,
+          alpha = effectiveAlpha
+        )
+      }
+      DrawingToolType.WATERCOLOR -> {
+        drawScope.drawCircle(
+          color = stroke.color,
+          radius = (stroke.width * 1.2f).coerceAtLeast(3f),
+          center = pt.offset,
+          alpha = (effectiveAlpha * 0.22f).coerceIn(0f, 1f)
+        )
+      }
+      DrawingToolType.AIRBRUSH -> {
+        drawScope.drawCircle(
+          color = stroke.color,
+          radius = (stroke.width * 1.5f).coerceAtLeast(4f),
+          center = pt.offset,
+          alpha = (effectiveAlpha * 0.15f).coerceIn(0f, 1f)
+        )
+      }
+      DrawingToolType.BLENDER -> {
+        drawScope.drawCircle(
+          color = stroke.color.copy(alpha = 0.25f),
+          radius = (stroke.width * 1.5f),
+          center = pt.offset,
+          alpha = (effectiveAlpha * 0.4f).coerceIn(0f, 1f)
+        )
+      }
+      else -> {
+        // 1. Soft Graphite Shadow under-dot
+        drawScope.drawCircle(
+          color = stroke.color,
+          radius = (r * grade.shadowWidthMultiplier).coerceAtLeast(1.2f),
+          center = pt.offset,
+          alpha = (effectiveAlpha * grade.shadowAlphaMultiplier).coerceIn(0f, 1f)
+        )
+        // 2. Main Dot Body
+        drawScope.drawCircle(
+          color = stroke.color,
+          radius = r.coerceAtLeast(0.8f),
+          center = pt.offset,
+          alpha = (effectiveAlpha * 0.85f).coerceIn(0f, 1f)
+        )
+        // 3. Dense Core Dot
+        drawScope.drawCircle(
+          color = stroke.color,
+          radius = (r * 0.52f).coerceAtLeast(0.5f),
+          center = pt.offset,
+          alpha = (effectiveAlpha * grade.coreAlpha).coerceIn(0f, 1f)
+        )
+      }
+    }
     return
   }
 
   val path = Path()
-  path.moveTo(stroke.points[0].offset.x, stroke.points[0].offset.y)
-
-  for (i in 1 until stroke.points.size) {
-    val p0 = stroke.points[i - 1].offset
-    val p1 = stroke.points[i].offset
-    val mid = Offset((p0.x + p1.x) / 2f, (p0.y + p1.y) / 2f)
-    path.quadraticTo(p0.x, p0.y, mid.x, mid.y)
+  val pts = stroke.points
+  if (ptCount == 2) {
+    path.moveTo(pts[0].offset.x, pts[0].offset.y)
+    path.lineTo(pts[1].offset.x, pts[1].offset.y)
+  } else {
+    path.moveTo(pts[0].offset.x, pts[0].offset.y)
+    for (i in 1 until ptCount - 1) {
+      val p0 = pts[i].offset
+      val p1 = pts[i + 1].offset
+      val mid = Offset((p0.x + p1.x) / 2f, (p0.y + p1.y) / 2f)
+      path.quadraticTo(p0.x, p0.y, mid.x, mid.y)
+    }
+    path.lineTo(pts.last().offset.x, pts.last().offset.y)
   }
 
-  drawScope.drawPath(
-    path = path,
-    color = stroke.color,
-    alpha = effectiveAlpha,
-    style = Stroke(
-      width = stroke.width.coerceAtLeast(1.0f),
-      cap = StrokeCap.Round,
-      join = StrokeJoin.Round
+  if (stroke.isEraser) {
+    drawScope.drawPath(
+      path = path,
+      color = stroke.color,
+      alpha = effectiveAlpha,
+      style = Stroke(
+        width = stroke.width.coerceAtLeast(1.0f),
+        cap = StrokeCap.Round,
+        join = StrokeJoin.Round
+      )
     )
-  )
+    return
+  }
+
+  when (grade.toolType) {
+    DrawingToolType.TECH_PEN -> {
+      // 0.3mm Fine Technical Pen for clean crisp portrait contours (eyes, lips, signature)
+      drawScope.drawPath(
+        path = path,
+        color = stroke.color,
+        alpha = effectiveAlpha,
+        style = Stroke(
+          width = stroke.width.coerceAtLeast(0.8f),
+          cap = StrokeCap.Round,
+          join = StrokeJoin.Round
+        )
+      )
+    }
+
+    DrawingToolType.HAIR_PEN -> {
+      // Ultra-fine 0.15mm hairline pen for individual hair strands and delicate eyelashes
+      drawScope.drawPath(
+        path = path,
+        color = stroke.color,
+        alpha = effectiveAlpha,
+        style = Stroke(
+          width = (stroke.width * 0.75f).coerceIn(0.5f, 2.5f),
+          cap = StrokeCap.Round,
+          join = StrokeJoin.Round
+        )
+      )
+    }
+
+    DrawingToolType.HIGHLIGHT_PEN -> {
+      // White Gel Highlight Pen: Luminous white core with subtle outer glow for eyes and lips
+      drawScope.drawPath(
+        path = path,
+        color = Color.White,
+        alpha = (effectiveAlpha * 0.40f).coerceIn(0f, 1f),
+        style = Stroke(
+          width = (stroke.width * 1.55f).coerceAtLeast(2.0f),
+          cap = StrokeCap.Round,
+          join = StrokeJoin.Round
+        )
+      )
+      drawScope.drawPath(
+        path = path,
+        color = Color.White,
+        alpha = effectiveAlpha,
+        style = Stroke(
+          width = stroke.width.coerceAtLeast(1.0f),
+          cap = StrokeCap.Round,
+          join = StrokeJoin.Round
+        )
+      )
+    }
+
+    DrawingToolType.WATERCOLOR -> {
+      // Soft translucent watercolor wash for blush and delicate skin shading
+      drawScope.drawPath(
+        path = path,
+        color = stroke.color,
+        alpha = (effectiveAlpha * 0.20f).coerceIn(0f, 1f),
+        style = Stroke(
+          width = (stroke.width * 1.6f).coerceAtLeast(6.0f),
+          cap = StrokeCap.Round,
+          join = StrokeJoin.Round
+        )
+      )
+      drawScope.drawPath(
+        path = path,
+        color = stroke.color,
+        alpha = (effectiveAlpha * 0.35f).coerceIn(0f, 1f),
+        style = Stroke(
+          width = stroke.width.coerceAtLeast(3.0f),
+          cap = StrokeCap.Round,
+          join = StrokeJoin.Round
+        )
+      )
+    }
+
+    DrawingToolType.AIRBRUSH -> {
+      // Soft diffuse airbrush for flawless skin gradients
+      drawScope.drawPath(
+        path = path,
+        color = stroke.color,
+        alpha = (effectiveAlpha * 0.12f).coerceIn(0f, 1f),
+        style = Stroke(
+          width = (stroke.width * 2.0f).coerceAtLeast(10.0f),
+          cap = StrokeCap.Round,
+          join = StrokeJoin.Round
+        )
+      )
+      drawScope.drawPath(
+        path = path,
+        color = stroke.color,
+        alpha = (effectiveAlpha * 0.22f).coerceIn(0f, 1f),
+        style = Stroke(
+          width = (stroke.width * 1.2f).coerceAtLeast(5.0f),
+          cap = StrokeCap.Round,
+          join = StrokeJoin.Round
+        )
+      )
+    }
+
+    DrawingToolType.DIP_PEN -> {
+      // Dynamic Spring G-Pen for expressive comic & portrait inking
+      drawScope.drawPath(
+        path = path,
+        color = stroke.color,
+        alpha = (effectiveAlpha * 0.25f).coerceIn(0f, 1f),
+        style = Stroke(
+          width = (stroke.width * 1.25f).coerceAtLeast(1.2f),
+          cap = StrokeCap.Round,
+          join = StrokeJoin.Round
+        )
+      )
+      drawScope.drawPath(
+        path = path,
+        color = stroke.color,
+        alpha = effectiveAlpha,
+        style = Stroke(
+          width = stroke.width.coerceAtLeast(0.9f),
+          cap = StrokeCap.Round,
+          join = StrokeJoin.Round
+        )
+      )
+    }
+
+    DrawingToolType.HATCHING -> {
+      // Academic cross-hatch shading pencil
+      drawScope.drawPath(
+        path = path,
+        color = stroke.color,
+        alpha = (effectiveAlpha * 0.85f).coerceIn(0f, 1f),
+        style = Stroke(
+          width = stroke.width.coerceAtLeast(1.0f),
+          cap = StrokeCap.Square,
+          join = StrokeJoin.Miter
+        )
+      )
+    }
+
+    DrawingToolType.BLENDER -> {
+      // Soft Blending Stump for smooth skin/shadow shading without harsh lines
+      drawScope.drawPath(
+        path = path,
+        color = stroke.color,
+        alpha = (effectiveAlpha * 0.28f).coerceIn(0f, 1f),
+        style = Stroke(
+          width = (stroke.width * 1.8f).coerceAtLeast(4.0f),
+          cap = StrokeCap.Round,
+          join = StrokeJoin.Round
+        )
+      )
+      drawScope.drawPath(
+        path = path,
+        color = stroke.color,
+        alpha = (effectiveAlpha * 0.45f).coerceIn(0f, 1f),
+        style = Stroke(
+          width = (stroke.width * 1.1f).coerceAtLeast(2.0f),
+          cap = StrokeCap.Round,
+          join = StrokeJoin.Round
+        )
+      )
+    }
+
+    DrawingToolType.BRUSH_PEN -> {
+      // Dynamic calligraphy / hair brush pen
+      drawScope.drawPath(
+        path = path,
+        color = stroke.color,
+        alpha = (effectiveAlpha * 0.35f).coerceIn(0f, 1f),
+        style = Stroke(
+          width = (stroke.width * 1.35f).coerceAtLeast(1.5f),
+          cap = StrokeCap.Round,
+          join = StrokeJoin.Round
+        )
+      )
+      drawScope.drawPath(
+        path = path,
+        color = stroke.color,
+        alpha = effectiveAlpha,
+        style = Stroke(
+          width = stroke.width.coerceAtLeast(1.0f),
+          cap = StrokeCap.Round,
+          join = StrokeJoin.Round
+        )
+      )
+    }
+
+    DrawingToolType.MARKER -> {
+      // Chisel Marker with broad flat edge
+      drawScope.drawPath(
+        path = path,
+        color = stroke.color,
+        alpha = (effectiveAlpha * 0.65f).coerceIn(0f, 1f),
+        style = Stroke(
+          width = stroke.width.coerceAtLeast(4.0f),
+          cap = StrokeCap.Square,
+          join = StrokeJoin.Bevel
+        )
+      )
+    }
+
+    DrawingToolType.PEN -> {
+      // Solid clean inking pen
+      drawScope.drawPath(
+        path = path,
+        color = stroke.color,
+        alpha = effectiveAlpha,
+        style = Stroke(
+          width = stroke.width.coerceAtLeast(1.0f),
+          cap = StrokeCap.Round,
+          join = StrokeJoin.Round
+        )
+      )
+    }
+
+    DrawingToolType.CHARCOAL -> {
+      // Deep matte velvety carbon charcoal with rich tooth & grain for hair shading
+      val shadowWidth = (stroke.width * 1.55f).coerceAtLeast(2.0f)
+      drawScope.drawPath(
+        path = path,
+        color = stroke.color,
+        alpha = (effectiveAlpha * 0.35f).coerceIn(0f, 1f),
+        style = Stroke(width = shadowWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
+      )
+      drawScope.drawPath(
+        path = path,
+        color = stroke.color,
+        alpha = (effectiveAlpha * 0.88f).coerceIn(0f, 1f),
+        style = Stroke(width = stroke.width.coerceAtLeast(1.2f), cap = StrokeCap.Round, join = StrokeJoin.Round)
+      )
+      drawScope.drawPath(
+        path = path,
+        color = stroke.color,
+        alpha = (effectiveAlpha * 0.98f).coerceIn(0f, 1f),
+        style = Stroke(width = (stroke.width * 0.65f).coerceAtLeast(0.9f), cap = StrokeCap.Round, join = StrokeJoin.Round)
+      )
+      // Charcoal grain dots along the stroke
+      val step = (ptCount / 12).coerceAtLeast(2)
+      for (i in 0 until ptCount step step) {
+        val pt = stroke.points[i].offset
+        val seed = ((pt.x * 37 + pt.y * 19).toInt() and 0x7FFFFFFF)
+        val jx = ((seed % 100) / 100f - 0.5f) * stroke.width * 0.8f
+        val jy = (((seed / 100) % 100) / 100f - 0.5f) * stroke.width * 0.8f
+        drawScope.drawCircle(
+          color = stroke.color,
+          radius = (stroke.width * 0.18f).coerceIn(0.6f, 2.5f),
+          center = Offset(pt.x + jx, pt.y + jy),
+          alpha = (effectiveAlpha * 0.55f).coerceIn(0f, 1f)
+        )
+      }
+    }
+
+    else -> {
+      // 1. Realistic Graphite Shadow Layer (বাস্তব পেন্সিলের মতো নরম শ্যাডো ভাব)
+      val shadowWidth = (stroke.width * grade.shadowWidthMultiplier).coerceAtLeast(1.5f)
+      drawScope.drawPath(
+        path = path,
+        color = stroke.color,
+        alpha = (effectiveAlpha * grade.shadowAlphaMultiplier).coerceIn(0f, 1f),
+        style = Stroke(
+          width = shadowWidth,
+          cap = StrokeCap.Round,
+          join = StrokeJoin.Round
+        )
+      )
+
+      // 2. Main Graphite Body (পেন্সিলের আসল বডি ও টেক্সচার)
+      drawScope.drawPath(
+        path = path,
+        color = stroke.color,
+        alpha = (effectiveAlpha * 0.82f).coerceIn(0f, 1f),
+        style = Stroke(
+          width = stroke.width.coerceAtLeast(1.0f),
+          cap = StrokeCap.Round,
+          join = StrokeJoin.Round
+        )
+      )
+
+      // 3. Dense Sharp Core (শার্প গ্রাফাইট কোর)
+      drawScope.drawPath(
+        path = path,
+        color = stroke.color,
+        alpha = (effectiveAlpha * grade.coreAlpha).coerceIn(0f, 1f),
+        style = Stroke(
+          width = (stroke.width * 0.52f).coerceAtLeast(0.8f),
+          cap = StrokeCap.Round,
+          join = StrokeJoin.Round
+        )
+      )
+
+      // 4. Graphite Paper Tooth / Grain Speckles along the stroke (দ্বিতীয় ছবির মতো পেন্সিলের টেক্সচার দাগ)
+      val step = (ptCount / 14).coerceAtLeast(2)
+      for (i in 0 until ptCount step step) {
+        val pt = stroke.points[i].offset
+        val seed = ((pt.x * 31 + pt.y * 17).toInt() and 0x7FFFFFFF)
+        val jx = ((seed % 100) / 100f - 0.5f) * stroke.width * 0.65f
+        val jy = (((seed / 100) % 100) / 100f - 0.5f) * stroke.width * 0.65f
+        drawScope.drawCircle(
+          color = stroke.color,
+          radius = (stroke.width * 0.16f).coerceIn(0.5f, 1.8f),
+          center = Offset(pt.x + jx, pt.y + jy),
+          alpha = (effectiveAlpha * (0.35f + grade.grain * 0.35f)).coerceIn(0f, 1f)
+        )
+      }
+    }
+  }
 }
 
 fun drawShapeLayer(drawScope: DrawScope, layer: Layer, alpha: Float) {
@@ -342,6 +763,13 @@ fun drawTextLayer(drawScope: DrawScope, layer: Layer, alpha: Float) {
   )
 }
 
+enum class ImageDragMode {
+  NONE,
+  MOVE,
+  RESIZE_CORNER,
+  ROTATE
+}
+
 @Composable
 fun SketchbookCanvas(
   modifier: Modifier = Modifier,
@@ -359,13 +787,17 @@ fun SketchbookCanvas(
   canRedo: Boolean,
   onUndoClick: () -> Unit,
   onRedoClick: () -> Unit,
+  onUndoLongClick: () -> Unit = {},
+  onRedoLongClick: () -> Unit = {},
   isPanMode: Boolean,
   onTogglePanMode: (Boolean) -> Unit,
   isImageEditMode: Boolean,
   onExitImageEditMode: () -> Unit,
   onUpdateImageTransform: (offsetX: Float, offsetY: Float, scale: Float, rotation: Float) -> Unit,
+  onOpenImageTransformDialog: () -> Unit,
   soloMode: Boolean,
   currentTime: Float,
+  canvasRevision: Long = 0L,
   onStrokeCompleted: (PencilStroke) -> Unit,
   onStrokeErased: (PencilStroke) -> Unit,
   zoomScale: Float,
@@ -374,12 +806,14 @@ fun SketchbookCanvas(
   onTransformChange: (zoom: Float, pan: Offset, rotation: Float) -> Unit
 ) {
   val activeStrokePoints = remember { mutableStateListOf<StrokePoint>() }
+  var liveStrokeStartTime by remember { mutableLongStateOf(0L) }
   val paperWidth = canvasSize.width
   val paperHeight = canvasSize.height
 
   Box(
     modifier = modifier
       .fillMaxSize()
+      .clipToBounds()
       .background(Color(0xFF888E99)) // Studio sketchbook desk
       .pointerInput(
         activeLayer?.id,
@@ -401,7 +835,13 @@ fun SketchbookCanvas(
           var prevCentroid = Offset.Zero
           var prevAngle = 0f
           var prevSinglePos = Offset.Zero
+          var prevCanvasPos = Offset.Zero
           var isMultiTouch = false
+          var imageDragMode = ImageDragMode.NONE
+          var strokeStartTimeMs = 0L
+          var strokeStartPos = Offset.Zero
+          var strokeMaxDist = 0f
+          var lastRecordedPos = Offset.Zero
 
           while (true) {
             val event = awaitPointerEvent()
@@ -409,6 +849,13 @@ fun SketchbookCanvas(
 
             if (changes.size >= 2) {
               isMultiTouch = true
+              activeStrokePoints.clear()
+              liveStrokeStartTime = 0L
+              strokeStartTimeMs = 0L
+              strokeStartPos = Offset.Zero
+              strokeMaxDist = 0f
+              lastRecordedPos = Offset.Zero
+
               val p1 = changes[0].position
               val p2 = changes[1].position
               val dx = p1.x - p2.x
@@ -418,20 +865,24 @@ fun SketchbookCanvas(
               val currentAngle = (atan2(dy.toDouble(), dx.toDouble()) * 180.0 / PI).toFloat()
 
               if (isImageEditMode && activeLayer != null && activeLayer.type == LayerType.IMAGE) {
-                // HAND RESIZE IMAGE: 2 fingers scale & rotate photo
+                // Two-finger pinch: Smooth scale & rotate photo
                 if (prevDist > 10f) {
                   val scaleRatio = currentDist / prevDist
-                  val newScale = (activeLayer.imageScale * scaleRatio).coerceIn(0.1f, 5.0f)
+                  val newScale = (activeLayer.imageScale * scaleRatio).coerceIn(0.1f, 6.0f)
                   val angleDelta = currentAngle - prevAngle
+
+                  // Center pan
+                  val panDelta = (currentCentroid - prevCentroid) / zoomScale
+
                   onUpdateImageTransform(
-                    activeLayer.imageOffsetX,
-                    activeLayer.imageOffsetY,
+                    activeLayer.imageOffsetX + panDelta.x,
+                    activeLayer.imageOffsetY + panDelta.y,
                     newScale,
                     activeLayer.imageRotation + angleDelta
                   )
                 }
               } else {
-                // PINPOINT FOCAL ZOOM & SMOOTH HAND ROTATION
+                // Pinpoint focal zoom & smooth rotation for canvas
                 if (prevDist > 10f && prevCentroid != Offset.Zero) {
                   val zoomRatio = currentDist / prevDist
                   val newZoom = (zoomScale * zoomRatio).coerceIn(0.10f, 15.0f)
@@ -454,26 +905,93 @@ fun SketchbookCanvas(
             } else if (changes.size == 1) {
               val change = changes[0]
 
-              if (isImageEditMode && activeLayer != null && activeLayer.type == LayerType.IMAGE) {
-                // HAND MOVE IMAGE: 1 finger moves photo
+              if (isImageEditMode && activeLayer != null && activeLayer.type == LayerType.IMAGE && activeLayer.imageBitmap != null) {
+                // Single-touch photo manipulation: Corner drag resize, Rotation stick, or Move
+                val canvasPos = screenToCanvas(
+                  change.position,
+                  panOffset,
+                  zoomScale,
+                  canvasRotation,
+                  paperWidth,
+                  paperHeight
+                )
+
+                val bmp = activeLayer.imageBitmap!!
+                val origW = if (activeLayer.imageOriginalWidth > 0f) activeLayer.imageOriginalWidth else bmp.width.toFloat()
+                val origH = if (activeLayer.imageOriginalHeight > 0f) activeLayer.imageOriginalHeight else bmp.height.toFloat()
+                val baseFit = (paperWidth / origW).coerceAtMost(paperHeight / origH)
+                val targetW = origW * baseFit * activeLayer.imageScale
+                val targetH = origH * baseFit * activeLayer.imageScale
+                val centerX = paperWidth / 2f + activeLayer.imageOffsetX
+                val centerY = paperHeight / 2f + activeLayer.imageOffsetY
+
                 if (change.pressed) {
-                  if (prevSinglePos != Offset.Zero) {
-                    val deltaX = (change.position.x - prevSinglePos.x) / zoomScale
-                    val deltaY = (change.position.y - prevSinglePos.y) / zoomScale
-                    onUpdateImageTransform(
-                      activeLayer.imageOffsetX + deltaX,
-                      activeLayer.imageOffsetY + deltaY,
-                      activeLayer.imageScale,
-                      activeLayer.imageRotation
-                    )
+                  if (prevSinglePos == Offset.Zero) {
+                    // Decide drag mode based on touch start location
+                    val dx = canvasPos.x - centerX
+                    val dy = canvasPos.y - centerY
+                    val rad = -Math.toRadians(activeLayer.imageRotation.toDouble())
+                    val unrotX = (dx * cos(rad) - dy * sin(rad)).toFloat()
+                    val unrotY = (dx * sin(rad) + dy * cos(rad)).toFloat()
+
+                    val halfW = targetW / 2f
+                    val halfH = targetH / 2f
+                    val tolerance = (44f / zoomScale).coerceAtLeast(30f)
+
+                    val isNearRotationHandle = kotlin.math.abs(unrotX) <= tolerance &&
+                      kotlin.math.abs(unrotY - (-halfH - 45f / zoomScale)) <= tolerance
+
+                    val isNearCorner = (kotlin.math.abs(kotlin.math.abs(unrotX) - halfW) <= tolerance &&
+                      kotlin.math.abs(kotlin.math.abs(unrotY) - halfH) <= tolerance)
+
+                    imageDragMode = if (isNearRotationHandle) {
+                      ImageDragMode.ROTATE
+                    } else if (isNearCorner) {
+                      ImageDragMode.RESIZE_CORNER
+                    } else {
+                      ImageDragMode.MOVE
+                    }
+                  } else {
+                    when (imageDragMode) {
+                      ImageDragMode.RESIZE_CORNER -> {
+                        // Smooth corner drag resizing!
+                        val distFromCenter = sqrt(((canvasPos.x - centerX) * (canvasPos.x - centerX) + (canvasPos.y - centerY) * (canvasPos.y - centerY)).toDouble()).toFloat()
+                        val baseHalfDiag = sqrt(((origW * baseFit / 2f) * (origW * baseFit / 2f) + (origH * baseFit / 2f) * (origH * baseFit / 2f)).toDouble()).toFloat()
+                        if (baseHalfDiag > 1f) {
+                          val newScale = (distFromCenter / baseHalfDiag).coerceIn(0.1f, 6.0f)
+                          onUpdateImageTransform(activeLayer.imageOffsetX, activeLayer.imageOffsetY, newScale, activeLayer.imageRotation)
+                        }
+                      }
+                      ImageDragMode.ROTATE -> {
+                        // Smooth rotation handle dragging
+                        val angleRad = atan2((canvasPos.y - centerY).toDouble(), (canvasPos.x - centerX).toDouble())
+                        val deg = (angleRad * 180.0 / PI).toFloat() + 90f
+                        onUpdateImageTransform(activeLayer.imageOffsetX, activeLayer.imageOffsetY, activeLayer.imageScale, deg)
+                      }
+                      ImageDragMode.MOVE -> {
+                        // Smooth translation in canvas coordinates
+                        val deltaX = canvasPos.x - prevCanvasPos.x
+                        val deltaY = canvasPos.y - prevCanvasPos.y
+                        onUpdateImageTransform(
+                          activeLayer.imageOffsetX + deltaX,
+                          activeLayer.imageOffsetY + deltaY,
+                          activeLayer.imageScale,
+                          activeLayer.imageRotation
+                        )
+                      }
+                      ImageDragMode.NONE -> {}
+                    }
                   }
                   prevSinglePos = change.position
+                  prevCanvasPos = canvasPos
                 } else {
                   prevSinglePos = Offset.Zero
+                  prevCanvasPos = Offset.Zero
+                  imageDragMode = ImageDragMode.NONE
                 }
                 change.consume()
               } else if (isPanMode) {
-                // PAN CANVAS MODE
+                // Pan Canvas Mode
                 if (change.pressed) {
                   if (prevSinglePos != Offset.Zero) {
                     val delta = change.position - prevSinglePos
@@ -485,7 +1003,7 @@ fun SketchbookCanvas(
                 }
                 change.consume()
               } else if (!isMultiTouch && activeLayer != null && !activeLayer.locked && activeLayer.visible) {
-                // DRAWING OR ERASING MODE WITH 100% ACCURATE TOUCH ALIGNMENT!
+                // Drawing / Erasing Mode with 100% accurate coordinate alignment
                 val canvasPos = screenToCanvas(
                   change.position,
                   panOffset,
@@ -496,7 +1014,6 @@ fun SketchbookCanvas(
                 )
 
                 if (isEraser) {
-                  // TRUE STROKE ERASER (NO WHITE PAINT!)
                   if (change.pressed) {
                     eraseStrokesUnderPoint(
                       layer = activeLayer,
@@ -507,18 +1024,57 @@ fun SketchbookCanvas(
                   }
                   change.consume()
                 } else {
-                  // DRAWING STROKE
-                  val pressure = if (change.type == PointerType.Stylus) {
+                  val isStylus = change.type == PointerType.Stylus
+                  val pressure = if (isStylus) {
                     change.pressure.coerceIn(0.1f, 1.0f)
                   } else {
                     0.5f
                   }
 
                   if (change.pressed) {
-                    activeStrokePoints.add(StrokePoint(canvasPos, pressure, System.currentTimeMillis()))
+                    if (activeStrokePoints.isEmpty()) {
+                      strokeStartTimeMs = System.currentTimeMillis()
+                      liveStrokeStartTime = strokeStartTimeMs
+                      strokeStartPos = canvasPos
+                      strokeMaxDist = 0f
+                      lastRecordedPos = canvasPos
+                      activeStrokePoints.add(StrokePoint(canvasPos, pressure, strokeStartTimeMs))
+                    } else {
+                      val dx = canvasPos.x - lastRecordedPos.x
+                      val dy = canvasPos.y - lastRecordedPos.y
+                      val distFromLast = kotlin.math.hypot(dx, dy)
+                      val distFromStart = kotlin.math.hypot(canvasPos.x - strokeStartPos.x, canvasPos.y - strokeStartPos.y)
+                      if (distFromStart > strokeMaxDist) {
+                        strokeMaxDist = distFromStart
+                      }
+
+                      // De-jitter threshold: only add point if finger moved sufficiently (>= 2.0px)
+                      // Apply weighted moving average smoothing so curves are silky smooth without micro-jitter
+                      if (distFromLast >= 2.0f) {
+                        val smoothX = lastRecordedPos.x * 0.30f + canvasPos.x * 0.70f
+                        val smoothY = lastRecordedPos.y * 0.30f + canvasPos.y * 0.70f
+                        val smoothedPos = Offset(smoothX, smoothY)
+                        activeStrokePoints.add(StrokePoint(smoothedPos, pressure, System.currentTimeMillis()))
+                        lastRecordedPos = smoothedPos
+                      }
+                    }
                     change.consume()
                   } else {
-                    if (activeStrokePoints.isNotEmpty()) {
+                    // Finger lifted: evaluate if this was an accidental contact or a deliberate stroke
+                    val durationMs = if (strokeStartTimeMs > 0L) System.currentTimeMillis() - strokeStartTimeMs else 0L
+
+                    // অনাকাঙ্ক্ষিত ফোটা ও ছোট ছোট ডট পড়া সম্পূর্ণ বন্ধ করার ইন্টেলিজেন্ট ফিল্টার:
+                    // ১. সাধারণ আঙুলের ক্ষণিক স্পর্শ (< 300ms) যাতে কোনো দাগ/ফোটা না পড়ে
+                    // ২. ইচ্ছাকৃত ডট আঁকতে চাইলে আঙুল ধরে রাখতে হবে (>= 320ms) অথবা স্টাইলাস ব্যবহার করতে হবে
+                    val isAccidentalTap = if (isStylus) {
+                      activeStrokePoints.isEmpty()
+                    } else {
+                      (strokeMaxDist < 7.5f && durationMs < 300L) ||
+                      (activeStrokePoints.size <= 2 && strokeMaxDist < 4.5f && durationMs < 450L) ||
+                      (strokeMaxDist < 2.5f && durationMs < 600L)
+                    }
+
+                    if (!isAccidentalTap && activeStrokePoints.isNotEmpty()) {
                       val newStroke = PencilStroke(
                         points = activeStrokePoints.toList(),
                         color = brushColor,
@@ -526,11 +1082,16 @@ fun SketchbookCanvas(
                         opacity = brushOpacity * activePencil.baseOpacity,
                         pencilGrade = activePencil.code,
                         isEraser = false,
-                        startTimeMs = System.currentTimeMillis()
+                        startTimeMs = strokeStartTimeMs
                       )
                       onStrokeCompleted(newStroke)
-                      activeStrokePoints.clear()
                     }
+                    activeStrokePoints.clear()
+                    liveStrokeStartTime = 0L
+                    strokeStartTimeMs = 0L
+                    strokeStartPos = Offset.Zero
+                    strokeMaxDist = 0f
+                    lastRecordedPos = Offset.Zero
                     change.consume()
                   }
                 }
@@ -541,19 +1102,30 @@ fun SketchbookCanvas(
                 prevDist = 0f
                 prevCentroid = Offset.Zero
                 prevSinglePos = Offset.Zero
+                prevCanvasPos = Offset.Zero
+                imageDragMode = ImageDragMode.NONE
+                strokeStartTimeMs = 0L
+                strokeStartPos = Offset.Zero
+                strokeMaxDist = 0f
+                lastRecordedPos = Offset.Zero
               }
             } else {
               isMultiTouch = false
               prevDist = 0f
               prevCentroid = Offset.Zero
               prevSinglePos = Offset.Zero
+              prevCanvasPos = Offset.Zero
+              imageDragMode = ImageDragMode.NONE
             }
           }
         }
       }
   ) {
     // 1. Canvas Paper Drawing Area
-    Canvas(modifier = Modifier.fillMaxSize()) {
+    Canvas(modifier = Modifier.fillMaxSize().clipToBounds()) {
+      // Observe revision counter so any undo/redo/stroke change invalidates canvas immediately
+      val _revisionInvalidator = canvasRevision
+
       translate(panOffset.x, panOffset.y) {
         scale(zoomScale, pivot = Offset.Zero) {
           rotate(canvasRotation, pivot = Offset(paperWidth / 2f, paperHeight / 2f)) {
@@ -564,7 +1136,8 @@ fun SketchbookCanvas(
               size = Size(paperWidth, paperHeight),
               cornerRadius = CornerRadius(8f, 8f)
             )
-            // Paper Base
+
+            // Paper Base Color (রঙ)
             val bgLayer = layers.find { it.type == LayerType.BACKGROUND }
             val paperColor = bgLayer?.backgroundColor ?: Color.White
             drawRect(
@@ -572,6 +1145,16 @@ fun SketchbookCanvas(
               topLeft = Offset(0f, 0f),
               size = Size(paperWidth, paperHeight)
             )
+
+            // Paper Background Image (যদি ব্যাকগ্রাউন্ড ছবি নির্বাচন করা থাকে)
+            bgLayer?.backgroundImageBitmap?.let { bgBmp ->
+              drawImage(
+                image = bgBmp,
+                dstOffset = IntOffset.Zero,
+                dstSize = IntSize(paperWidth.toInt(), paperHeight.toInt())
+              )
+            }
+
             // Paper Border Outline
             drawRect(
               color = Color(0xFFD1D5DB),
@@ -580,9 +1163,7 @@ fun SketchbookCanvas(
               style = Stroke(width = 1.5f)
             )
 
-            // STRICT CANVAS BOUNDS CLIPPING:
-            // "আর ছবি ইনসার্ট করার সময় যেই ছবিটা ক্যানভাসে থাকবে, ক্যানভাসে বাকি অংশগুলো কেটে দিও ফাইনাল করার পর।"
-            // Any image, drawing, text, or shape extending outside the canvas is cleanly clipped/cut off!
+            // Canvas Bounds Clipping: Drawings and images outside canvas are cleanly clipped
             clipRect(left = 0f, top = 0f, right = paperWidth, bottom = paperHeight) {
               if (soloMode && activeLayer != null) {
                 drawSingleLayerIsolated(this, activeLayer, currentTime, paperWidth, paperHeight)
@@ -595,19 +1176,23 @@ fun SketchbookCanvas(
 
               // Live drawing stroke (same transform space!)
               if (activeStrokePoints.isNotEmpty() && activeLayer != null && !isEraser) {
-                val liveStroke = PencilStroke(
-                  points = activeStrokePoints.toList(),
-                  color = brushColor,
-                  width = brushSize * (activePencil.baseWidth / 4.0f),
-                  opacity = brushOpacity * activePencil.baseOpacity,
-                  pencilGrade = activePencil.code,
-                  isEraser = false
-                )
-                drawSharpPencilStroke(this, liveStroke, activeLayer.opacity)
+                val liveDuration = if (liveStrokeStartTime > 0L) System.currentTimeMillis() - liveStrokeStartTime else 0L
+                val shouldRenderLive = activeStrokePoints.size >= 2 || liveDuration >= 280L
+                if (shouldRenderLive) {
+                  val liveStroke = PencilStroke(
+                    points = activeStrokePoints.toList(),
+                    color = brushColor,
+                    width = brushSize * (activePencil.baseWidth / 4.0f),
+                    opacity = brushOpacity * activePencil.baseOpacity,
+                    pencilGrade = activePencil.code,
+                    isEraser = false
+                  )
+                  drawSharpPencilStroke(this, liveStroke, activeLayer.opacity)
+                }
               }
             }
 
-            // Visual Bounding Box if Image Edit Mode is active
+            // Visual Bounding Box with Corner Drag Handles and Rotation Stick
             if (isImageEditMode && activeLayer != null && activeLayer.type == LayerType.IMAGE && activeLayer.imageBitmap != null) {
               val bmp = activeLayer.imageBitmap!!
               val origW = if (activeLayer.imageOriginalWidth > 0f) activeLayer.imageOriginalWidth else bmp.width.toFloat()
@@ -619,21 +1204,51 @@ fun SketchbookCanvas(
               val centerY = paperHeight / 2f + activeLayer.imageOffsetY
 
               rotate(activeLayer.imageRotation, Offset(centerX, centerY)) {
+                // Bounding rect
                 drawRect(
                   color = Color(0xFF007ACC),
                   topLeft = Offset(centerX - targetW / 2f, centerY - targetH / 2f),
                   size = Size(targetW, targetH),
                   style = Stroke(width = 2.5f / zoomScale)
                 )
-                listOf(
+
+                // Rotation Stick & Handle at top
+                val rotStickY = centerY - targetH / 2f - 40f / zoomScale
+                drawLine(
+                  color = Color(0xFF007ACC),
+                  start = Offset(centerX, centerY - targetH / 2f),
+                  end = Offset(centerX, rotStickY),
+                  strokeWidth = 2f / zoomScale
+                )
+                drawCircle(color = Color(0xFF007ACC), radius = 10f / zoomScale, center = Offset(centerX, rotStickY))
+                drawCircle(color = Color.White, radius = 6f / zoomScale, center = Offset(centerX, rotStickY))
+
+                // 4 Interactive Corner Handles
+                val corners = listOf(
                   Offset(centerX - targetW / 2f, centerY - targetH / 2f),
                   Offset(centerX + targetW / 2f, centerY - targetH / 2f),
                   Offset(centerX - targetW / 2f, centerY + targetH / 2f),
                   Offset(centerX + targetW / 2f, centerY + targetH / 2f)
-                ).forEach { corner ->
-                  drawCircle(color = Color(0xFF007ACC), radius = 6f / zoomScale, center = corner)
-                  drawCircle(color = Color.White, radius = 4f / zoomScale, center = corner)
+                )
+                corners.forEach { corner ->
+                  drawCircle(color = Color(0xFF007ACC), radius = 10f / zoomScale, center = corner)
+                  drawCircle(color = Color.White, radius = 7f / zoomScale, center = corner)
+                  drawCircle(color = Color(0xFF007ACC), radius = 3.5f / zoomScale, center = corner)
                 }
+
+                // Center crosshair
+                drawLine(
+                  color = Color(0x88007ACC),
+                  start = Offset(centerX - 10f / zoomScale, centerY),
+                  end = Offset(centerX + 10f / zoomScale, centerY),
+                  strokeWidth = 1.5f / zoomScale
+                )
+                drawLine(
+                  color = Color(0x88007ACC),
+                  start = Offset(centerX, centerY - 10f / zoomScale),
+                  end = Offset(centerX, centerY + 10f / zoomScale),
+                  strokeWidth = 1.5f / zoomScale
+                )
               }
             }
           }
@@ -641,7 +1256,7 @@ fun SketchbookCanvas(
       }
     }
 
-    // 2. Persistent Floating Quick Undo / Redo on Canvas (Available at ANY zoom level!)
+    // 2. Persistent Floating Quick Undo / Redo / History on Canvas
     Row(
       modifier = Modifier
         .align(Alignment.BottomStart)
@@ -652,10 +1267,17 @@ fun SketchbookCanvas(
         .padding(horizontal = 4.dp, vertical = 2.dp),
       verticalAlignment = Alignment.CenterVertically
     ) {
-      IconButton(
-        onClick = onUndoClick,
-        enabled = canUndo,
-        modifier = Modifier.size(36.dp)
+      @OptIn(ExperimentalFoundationApi::class)
+      Box(
+        modifier = Modifier
+          .size(36.dp)
+          .clip(CircleShape)
+          .combinedClickable(
+            enabled = canUndo,
+            onClick = { onUndoClick() },
+            onLongClick = { onUndoLongClick() }
+          ),
+        contentAlignment = Alignment.Center
       ) {
         Icon(
           Icons.AutoMirrored.Filled.Undo,
@@ -667,10 +1289,17 @@ fun SketchbookCanvas(
 
       Box(modifier = Modifier.width(1.dp).height(20.dp).background(Color(0xFFE2E8F0)))
 
-      IconButton(
-        onClick = onRedoClick,
-        enabled = canRedo,
-        modifier = Modifier.size(36.dp)
+      @OptIn(ExperimentalFoundationApi::class)
+      Box(
+        modifier = Modifier
+          .size(36.dp)
+          .clip(CircleShape)
+          .combinedClickable(
+            enabled = canRedo,
+            onClick = { onRedoClick() },
+            onLongClick = { onRedoLongClick() }
+          ),
+        contentAlignment = Alignment.Center
       ) {
         Icon(
           Icons.AutoMirrored.Filled.Redo,
@@ -679,44 +1308,165 @@ fun SketchbookCanvas(
           modifier = Modifier.size(20.dp)
         )
       }
+
+      Box(modifier = Modifier.width(1.dp).height(20.dp).background(Color(0xFFE2E8F0)))
+
+      // Dedicated Multi-Undo History Menu
+      Box(
+        modifier = Modifier
+          .size(36.dp)
+          .clip(CircleShape)
+          .clickable(enabled = canUndo, onClick = onUndoLongClick),
+        contentAlignment = Alignment.Center
+      ) {
+        Icon(
+          Icons.Default.History,
+          contentDescription = "Undo History",
+          tint = if (canUndo) Color(0xFF0284C7) else Color(0xFFCBD5E1),
+          modifier = Modifier.size(19.dp)
+        )
+      }
     }
 
-    // 3. Hand Image Resize Active Banner
+    // 3. Hand Image Resize & Move Quick Action Bar (Floating at Top Center)
     if (isImageEditMode && activeLayer != null && activeLayer.type == LayerType.IMAGE) {
-      Row(
+      Column(
         modifier = Modifier
           .align(Alignment.TopCenter)
-          .padding(top = 10.dp)
-          .clip(RoundedCornerShape(20.dp))
-          .background(Color(0xF00F172A))
-          .border(1.dp, Color(0xFF007ACC), RoundedCornerShape(20.dp))
-          .padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+          .padding(top = 8.dp)
+          .clip(RoundedCornerShape(16.dp))
+          .background(Color(0xF20F172A))
+          .border(1.dp, Color(0xFF007ACC), RoundedCornerShape(16.dp))
+          .padding(horizontal = 10.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
       ) {
-        Icon(Icons.Default.Transform, contentDescription = "Resize", tint = Color(0xFF38BDF8), modifier = Modifier.size(16.dp))
-        Text(
-          "হাত দিয়ে ছবি সরান ও পিঞ্চ করে রিসাইজ করুন",
-          fontSize = 11.sp,
-          fontWeight = FontWeight.Bold,
-          color = Color.White
-        )
-        Box(
-          modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF16A34A))
-            .clickable(onClick = onExitImageEditMode)
-            .padding(horizontal = 8.dp, vertical = 3.dp)
+        // Status & Hint Row
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-          Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-            Icon(Icons.Default.Check, contentDescription = "Done", tint = Color.White, modifier = Modifier.size(12.dp))
-            Text("সম্পন্ন", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+          Text(
+            "ছবি রিসাইজ: কোণ ধরে টানুন বা বাটনে চাপুন",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF38BDF8)
+          )
+          Text(
+            "${(activeLayer.imageScale * 100).toInt()}%",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = Color.White,
+            modifier = Modifier
+              .background(Color(0xFF007ACC), RoundedCornerShape(4.dp))
+              .padding(horizontal = 6.dp, vertical = 1.dp)
+          )
+        }
+
+        // Quick Touch Buttons: Zoom In/Out, Rotate, Fit, Slider, Done
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+          // Scale Down (- 10%)
+          Box(
+            modifier = Modifier
+              .clip(RoundedCornerShape(8.dp))
+              .background(Color(0xFF334155))
+              .clickable {
+                val newS = (activeLayer.imageScale * 0.90f).coerceIn(0.1f, 6.0f)
+                onUpdateImageTransform(activeLayer.imageOffsetX, activeLayer.imageOffsetY, newS, activeLayer.imageRotation)
+              }
+              .padding(horizontal = 8.dp, vertical = 4.dp)
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+              Icon(Icons.Default.ZoomOut, contentDescription = "Smaller", tint = Color.White, modifier = Modifier.size(13.dp))
+              Text("ছোট", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+            }
+          }
+
+          // Scale Up (+ 10%)
+          Box(
+            modifier = Modifier
+              .clip(RoundedCornerShape(8.dp))
+              .background(Color(0xFF334155))
+              .clickable {
+                val newS = (activeLayer.imageScale * 1.10f).coerceIn(0.1f, 6.0f)
+                onUpdateImageTransform(activeLayer.imageOffsetX, activeLayer.imageOffsetY, newS, activeLayer.imageRotation)
+              }
+              .padding(horizontal = 8.dp, vertical = 4.dp)
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+              Icon(Icons.Default.ZoomIn, contentDescription = "Bigger", tint = Color.White, modifier = Modifier.size(13.dp))
+              Text("বড়", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+            }
+          }
+
+          // Rotate 90°
+          Box(
+            modifier = Modifier
+              .clip(RoundedCornerShape(8.dp))
+              .background(Color(0xFF334155))
+              .clickable {
+                val newRot = (activeLayer.imageRotation + 90f) % 360f
+                onUpdateImageTransform(activeLayer.imageOffsetX, activeLayer.imageOffsetY, activeLayer.imageScale, newRot)
+              }
+              .padding(horizontal = 8.dp, vertical = 4.dp)
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+              Icon(Icons.Default.RotateRight, contentDescription = "Rotate", tint = Color.White, modifier = Modifier.size(13.dp))
+              Text("ঘোরান", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+            }
+          }
+
+          // Center Image
+          Box(
+            modifier = Modifier
+              .clip(RoundedCornerShape(8.dp))
+              .background(Color(0xFF334155))
+              .clickable {
+                onUpdateImageTransform(0f, 0f, activeLayer.imageScale, activeLayer.imageRotation)
+              }
+              .padding(horizontal = 8.dp, vertical = 4.dp)
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+              Icon(Icons.Default.CenterFocusStrong, contentDescription = "Center", tint = Color.White, modifier = Modifier.size(13.dp))
+              Text("মাঝে", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+            }
+          }
+
+          // Detailed Sliders Dialog button
+          Box(
+            modifier = Modifier
+              .clip(RoundedCornerShape(8.dp))
+              .background(Color(0xFF0284C7))
+              .clickable(onClick = onOpenImageTransformDialog)
+              .padding(horizontal = 8.dp, vertical = 4.dp)
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+              Icon(Icons.Default.Tune, contentDescription = "Sliders", tint = Color.White, modifier = Modifier.size(13.dp))
+              Text("স্লাইডার", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+            }
+          }
+
+          // Done (সম্পন্ন)
+          Box(
+            modifier = Modifier
+              .clip(RoundedCornerShape(8.dp))
+              .background(Color(0xFF16A34A))
+              .clickable(onClick = onExitImageEditMode)
+              .padding(horizontal = 10.dp, vertical = 4.dp)
+          ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+              Icon(Icons.Default.Check, contentDescription = "Done", tint = Color.White, modifier = Modifier.size(13.dp))
+              Text("সম্পন্ন", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            }
           }
         }
       }
     }
 
-    // 4. Clean Floating Zoom & Rotation Controls (Far Top-Right Corner)
+    // 4. Floating Zoom & Rotation Controls (Far Top-Right Corner)
     Row(
       modifier = Modifier
         .align(Alignment.TopEnd)
@@ -728,7 +1478,6 @@ fun SketchbookCanvas(
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-      // Rotation Reset Button (Shown if rotated)
       if (kotlin.math.abs(canvasRotation) > 1f) {
         Box(
           modifier = Modifier

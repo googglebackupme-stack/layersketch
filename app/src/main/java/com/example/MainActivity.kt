@@ -13,17 +13,37 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,11 +51,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.example.model.CanvasPresets
 import com.example.model.CanvasSize
 import com.example.model.Layer
@@ -43,6 +70,7 @@ import com.example.model.LayerType
 import com.example.model.PencilPalette
 import com.example.model.PencilStroke
 import com.example.model.StrokePoint
+import com.example.model.UndoActionItem
 import com.example.ui.AddShapeDialog
 import com.example.ui.AddTextDialog
 import com.example.ui.BrushLibraryDialog
@@ -93,12 +121,15 @@ fun SketchbookAppScreen() {
 
   // Canvas Dimensions State (A4, A5, Square, Story, YouTube, Custom)
   var currentCanvasSize by remember { mutableStateOf(CanvasPresets.SQUARE) }
+  var canvasBackgroundColor by remember { mutableStateOf(Color.White) }
+  var canvasBackgroundImage by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
   var isCanvasSizeDialogOpen by remember { mutableStateOf(false) }
 
   // Layers Stack
   val layers = remember { mutableStateListOf<Layer>() }
   var activeLayerId by remember { mutableStateOf("") }
   var recTargetLayerId by remember { mutableStateOf("") }
+  val activeLayer = layers.find { it.id == activeLayerId }
 
   // Tool & Pencil State (15 Sharp Pencils: 4H to 9B, Inking Pen, Chisel Marker, Eraser)
   var activePencil by remember { mutableStateOf(PencilPalette.getGrade("2B")) }
@@ -134,9 +165,16 @@ fun SketchbookAppScreen() {
   var recordingElapsedSeconds by remember { mutableIntStateOf(0) }
   val recordedStrokesForTarget = remember { mutableStateListOf<PencilStroke>() }
 
-  // Stroke Undo / Redo History
-  val undoStack = remember { mutableStateListOf<Pair<String, PencilStroke>>() }
-  val redoStack = remember { mutableStateListOf<Pair<String, PencilStroke>>() }
+  // Safety & Warning Modals (to prevent accidental recording stop or canvas reset)
+  var showRecordStopConfirmDialog by remember { mutableStateOf(false) }
+  var showCanvasResetConfirmDialog by remember { mutableStateOf(false) }
+  var showClearLayerConfirmDialog by remember { mutableStateOf(false) }
+  var showUndoHistoryDialog by remember { mutableStateOf(false) }
+
+  // Stroke Undo / Redo History & Invalidation Counter
+  var canvasRevision by remember { mutableLongStateOf(0L) }
+  val undoStack = remember { mutableStateListOf<UndoActionItem>() }
+  val redoStack = remember { mutableStateListOf<UndoActionItem>() }
 
   // Wipe history on disposal/exit
   DisposableEffect(Unit) {
@@ -150,49 +188,117 @@ fun SketchbookAppScreen() {
     }
   }
 
-  // Common Undo Handler
-  val performUndo = {
+  // Common Undo Handler (আগের সমস্ত হিস্টোরি স্ট্রোক এক এক করে সম্পূর্ণ মুছে ফেলার নিখুঁত সিস্টেম)
+  val performUndo: () -> Unit = {
+    var undone = false
     if (undoStack.isNotEmpty()) {
-      val (layerId, stroke) = undoStack.removeLast()
-      val targetL = layers.find { it.id == layerId }
+      val item = undoStack.removeLast()
+      val targetL = layers.find { it.id == item.layerId }
       if (targetL != null) {
-        if (targetL.strokes.contains(stroke)) {
-          targetL.strokes.remove(stroke)
-          redoStack.add(layerId to stroke)
-          if (isLiveRecording && layerId == recTargetLayerId) {
-            recordedStrokesForTarget.remove(stroke)
+        if (!item.isErased) {
+          // ড্রয়িং স্ট্রোক মুছে ফেলা (Undo Draw)
+          val removed = targetL.strokes.removeAll { it.id == item.stroke.id }
+          if (!removed && targetL.strokes.isNotEmpty()) {
+            targetL.strokes.removeLast()
           }
+          redoStack.add(UndoActionItem(item.layerId, item.stroke, isErased = false))
+          if (isLiveRecording && item.layerId == recTargetLayerId) {
+            recordedStrokesForTarget.removeAll { it.id == item.stroke.id }
+          }
+          undone = true
         } else {
-          // Erased stroke restored!
-          targetL.strokes.add(stroke)
-          redoStack.add(layerId to stroke)
-          if (isLiveRecording && layerId == recTargetLayerId) {
-            recordedStrokesForTarget.add(stroke)
+          // ইরেজ করা স্ট্রোক পুনরায় ফিরিয়ে আনা (Undo Erase)
+          targetL.strokes.add(item.stroke)
+          redoStack.add(UndoActionItem(item.layerId, item.stroke, isErased = true))
+          if (isLiveRecording && item.layerId == recTargetLayerId) {
+            recordedStrokesForTarget.add(item.stroke)
           }
+          undone = true
         }
+      }
+    }
+
+    if (!undone) {
+      // Fallback: undoStack শেষ হয়ে গেলেও একটিভ লেয়ার বা পূর্বের ড্রয়িং লেয়ার থেকে আগের স্ট্রোক মুছুন
+      val targetL = activeLayer?.takeIf { it.strokes.isNotEmpty() }
+        ?: layers.firstOrNull { it.type == LayerType.DRAWING && it.strokes.isNotEmpty() }
+      if (targetL != null && targetL.strokes.isNotEmpty()) {
+        val stroke = targetL.strokes.removeLast()
+        redoStack.add(UndoActionItem(targetL.id, stroke, isErased = false))
+        if (isLiveRecording && targetL.id == recTargetLayerId) {
+          recordedStrokesForTarget.removeAll { it.id == stroke.id }
+        }
+        undone = true
+      }
+    }
+
+    if (undone) {
+      canvasRevision++
+    }
+  }
+
+  // Multi-step Undo Handler (আগের একাধিক স্ট্রোক একসাথে মোছা)
+  val performUndoMultiple: (Int) -> Unit = { count ->
+    var executed = 0
+    repeat(count) {
+      if (undoStack.isNotEmpty() || layers.any { it.type == LayerType.DRAWING && it.strokes.isNotEmpty() }) {
+        performUndo()
+        executed++
+      }
+    }
+    if (executed > 0) {
+      Toast.makeText(context, "${executed}টি পূর্ববর্তী স্ট্রোক মুছে ফেলা হয়েছে", Toast.LENGTH_SHORT).show()
+    }
+  }
+
+  // Clear all strokes on active layer and register in redo stack
+  val performUndoAllOnActiveLayer: () -> Unit = {
+    activeLayer?.let { l ->
+      val count = l.strokes.size
+      if (count > 0) {
+        val strokesToUndo = l.strokes.toList()
+        l.strokes.clear()
+        strokesToUndo.reversed().forEach { s ->
+          redoStack.add(UndoActionItem(l.id, s, isErased = false))
+        }
+        undoStack.removeAll { it.layerId == l.id }
+        if (isLiveRecording && l.id == recTargetLayerId) {
+          recordedStrokesForTarget.clear()
+        }
+        canvasRevision++
+        Toast.makeText(context, "${count}টি স্ট্রোক মুছে ফেলা হয়েছে", Toast.LENGTH_SHORT).show()
       }
     }
   }
 
   // Common Redo Handler
-  val performRedo = {
+  val performRedo: () -> Unit = {
     if (redoStack.isNotEmpty()) {
-      val (layerId, stroke) = redoStack.removeLast()
-      val targetL = layers.find { it.id == layerId }
+      val item = redoStack.removeLast()
+      val targetL = layers.find { it.id == item.layerId }
       if (targetL != null) {
-        if (targetL.strokes.contains(stroke)) {
-          targetL.strokes.remove(stroke)
-          undoStack.add(layerId to stroke)
-          if (isLiveRecording && layerId == recTargetLayerId) {
-            recordedStrokesForTarget.remove(stroke)
+        if (!item.isErased) {
+          targetL.strokes.add(item.stroke)
+          undoStack.add(UndoActionItem(item.layerId, item.stroke, isErased = false))
+          if (isLiveRecording && item.layerId == recTargetLayerId) {
+            recordedStrokesForTarget.add(item.stroke)
           }
         } else {
-          targetL.strokes.add(stroke)
-          undoStack.add(layerId to stroke)
-          if (isLiveRecording && layerId == recTargetLayerId) {
-            recordedStrokesForTarget.add(stroke)
+          targetL.strokes.removeAll { it.id == item.stroke.id }
+          undoStack.add(UndoActionItem(item.layerId, item.stroke, isErased = true))
+          if (isLiveRecording && item.layerId == recTargetLayerId) {
+            recordedStrokesForTarget.removeAll { it.id == item.stroke.id }
           }
         }
+        canvasRevision++
+      }
+    }
+  }
+
+  val performRedoMultiple: (Int) -> Unit = { count ->
+    repeat(count) {
+      if (redoStack.isNotEmpty()) {
+        performRedo()
       }
     }
   }
@@ -233,6 +339,29 @@ fun SketchbookAppScreen() {
         }
       } catch (e: Exception) {
         Toast.makeText(context, "ছবি লোড করা সম্ভব হয়নি", Toast.LENGTH_SHORT).show()
+      }
+    }
+  }
+
+  // Background Photo Picker Launcher
+  val bgPhotoPickerLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.PickVisualMedia()
+  ) { uri: Uri? ->
+    if (uri != null) {
+      try {
+        context.contentResolver.openInputStream(uri)?.use { inputStream ->
+          val bitmap = BitmapFactory.decodeStream(inputStream)
+          if (bitmap != null) {
+            val bmp = bitmap.asImageBitmap()
+            canvasBackgroundImage = bmp
+            val bgLayer = layers.find { it.type == LayerType.BACKGROUND }
+            bgLayer?.backgroundImageBitmap = bmp
+            bgLayer?.backgroundImageUri = uri.toString()
+            Toast.makeText(context, "ক্যানভাস ব্যাকগ্রাউন্ড ছবি সফলভাবে সেট হয়েছে!", Toast.LENGTH_SHORT).show()
+          }
+        }
+      } catch (e: Exception) {
+        Toast.makeText(context, "ব্যাকগ্রাউন্ড ছবি লোড করা সম্ভব হয়নি", Toast.LENGTH_SHORT).show()
       }
     }
   }
@@ -338,19 +467,24 @@ fun SketchbookAppScreen() {
       layers.addAll(listOf(lDetail, lCaricature, lPaper))
       activeLayerId = lDetail.id
       recTargetLayerId = lDetail.id
+
+      // Register initial caricature sketch strokes into undo history so they can also be undone!
+      lCaricature.strokes.forEach { stroke ->
+        undoStack.add(UndoActionItem(lCaricature.id, stroke, isErased = false))
+      }
     }
   }
 
-  val activeLayer = layers.find { it.id == activeLayerId }
   val recTargetLayer = layers.find { it.id == recTargetLayerId } ?: layers.firstOrNull()
 
   // Handle back button to dismiss panels
   BackHandler(
     enabled = isLayerPanelOpen || isBrushLibraryOpen || isColorWheelOpen || isToolsMenuOpen ||
       isPlaybackDialogOpen || isCanvasSizeDialogOpen || isImageTransformDialogOpen ||
-      isAddTextDialogOpen || isAddShapeDialogOpen || isImageEditMode
+      isAddTextDialogOpen || isAddShapeDialogOpen || isImageEditMode || showUndoHistoryDialog
   ) {
-    if (isImageEditMode) isImageEditMode = false
+    if (showUndoHistoryDialog) showUndoHistoryDialog = false
+    else if (isImageEditMode) isImageEditMode = false
     else if (isLayerPanelOpen) isLayerPanelOpen = false
     else if (isCanvasSizeDialogOpen) isCanvasSizeDialogOpen = false
     else if (isImageTransformDialogOpen) isImageTransformDialogOpen = false
@@ -370,40 +504,37 @@ fun SketchbookAppScreen() {
       .testTag("sketchbook_studio_root")
   ) {
     Column(modifier = Modifier.fillMaxSize()) {
-      // 1. Sketchbook Top Toolbar
+      // 1. Sketchbook Top Toolbar (Fixed at top with high zIndex so zoom never covers it!)
       SketchbookTopBar(
-        canUndo = undoStack.isNotEmpty(),
+        modifier = Modifier.fillMaxWidth().zIndex(30f),
+        canUndo = undoStack.isNotEmpty() || layers.any { it.type == LayerType.DRAWING && it.strokes.isNotEmpty() },
         canRedo = redoStack.isNotEmpty(),
         currentColor = brushColor,
         isLayerPanelOpen = isLayerPanelOpen,
+        layersCount = layers.size,
         onMenuClick = {
-          undoStack.clear()
-          redoStack.clear()
-          recordedStrokesForTarget.clear()
-          Toast.makeText(context, "হিস্ট্রি রিসেট করা হয়েছে", Toast.LENGTH_SHORT).show()
+          showCanvasResetConfirmDialog = true
         },
         onUndoClick = performUndo,
         onRedoClick = performRedo,
+        onUndoLongClick = { showUndoHistoryDialog = true },
+        onRedoLongClick = { performRedoMultiple(3) },
         onSavePhotoClick = {
-          // SAVE FULL ARTWORK AS PHOTO TO GALLERY (ফটোগ্রাফ সেভ)
+          // SAVE FULL ARTWORK AS PHOTO TO GALLERY (ফটোগ্রাফ সেভ - ক্যানভাস কালার ও ব্যাকগ্রাউন্ড সহ)
           coroutineScope.launch {
             GalleryExporter.saveCanvasAsPhoto(
               context = context,
               layers = layers,
               paperWidth = currentCanvasSize.width.toInt(),
-              paperHeight = currentCanvasSize.height.toInt()
+              paperHeight = currentCanvasSize.height.toInt(),
+              canvasColor = canvasBackgroundColor,
+              canvasBgImage = canvasBackgroundImage
             )
           }
         },
         onToolsClick = { isToolsMenuOpen = true },
         onBrushLibraryClick = { isBrushLibraryOpen = true },
         onColorWheelClick = { isColorWheelOpen = true },
-        onAddImageClick = {
-          photoPickerLauncher.launch(
-            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-          )
-        },
-        onCanvasSizeClick = { isCanvasSizeDialogOpen = true },
         onLayersClick = { isLayerPanelOpen = !isLayerPanelOpen },
         onFitClick = {
           zoomScale = 0.65f
@@ -412,9 +543,10 @@ fun SketchbookAppScreen() {
         }
       )
 
-      // 2. Main Studio Canvas with Right-Side Layer Panel
-      Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+      // 2. Main Studio Canvas with Right-Side Layer Panel (Strictly clipped so zoom never bleeds over topbar)
+      Box(modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
         SketchbookCanvas(
+          modifier = Modifier.fillMaxSize().clipToBounds(),
           canvasSize = currentCanvasSize,
           layers = layers,
           activeLayer = activeLayer,
@@ -425,10 +557,12 @@ fun SketchbookAppScreen() {
           brushOpacity = brushOpacity,
           onUpdateBrushOpacity = { brushOpacity = it },
           isEraser = isEraser,
-          canUndo = undoStack.isNotEmpty(),
+          canUndo = undoStack.isNotEmpty() || layers.any { it.type == LayerType.DRAWING && it.strokes.isNotEmpty() },
           canRedo = redoStack.isNotEmpty(),
           onUndoClick = performUndo,
           onRedoClick = performRedo,
+          onUndoLongClick = { showUndoHistoryDialog = true },
+          onRedoLongClick = { performRedoMultiple(3) },
           isPanMode = isPanMode,
           onTogglePanMode = { isPanMode = it },
           isImageEditMode = isImageEditMode,
@@ -441,8 +575,10 @@ fun SketchbookAppScreen() {
               it.imageRotation = r
             }
           },
+          onOpenImageTransformDialog = { isImageTransformDialogOpen = true },
           soloMode = soloMode,
           currentTime = 0f,
+          canvasRevision = canvasRevision,
           zoomScale = zoomScale,
           panOffset = panOffset,
           canvasRotation = canvasRotation,
@@ -454,8 +590,9 @@ fun SketchbookAppScreen() {
           onStrokeCompleted = { stroke ->
             if (activeLayer != null) {
               activeLayer.strokes.add(stroke)
-              undoStack.add(activeLayer.id to stroke)
+              undoStack.add(UndoActionItem(activeLayer.id, stroke, isErased = false))
               redoStack.clear()
+              canvasRevision++
 
               if (isLiveRecording && activeLayer.id == recTargetLayerId) {
                 recordedStrokesForTarget.add(stroke)
@@ -464,10 +601,11 @@ fun SketchbookAppScreen() {
           },
           onStrokeErased = { erasedStroke ->
             if (activeLayer != null) {
-              undoStack.add(activeLayer.id to erasedStroke)
+              undoStack.add(UndoActionItem(activeLayer.id, erasedStroke, isErased = true))
               redoStack.clear()
+              canvasRevision++
               if (isLiveRecording && activeLayer.id == recTargetLayerId) {
-                recordedStrokesForTarget.remove(erasedStroke)
+                recordedStrokesForTarget.removeAll { it.id == erasedStroke.id }
               }
             }
           }
@@ -481,71 +619,172 @@ fun SketchbookAppScreen() {
               recordedSeconds = recordingElapsedSeconds,
               recordedStrokeCount = recordedStrokesForTarget.size,
               onPausePreviewClick = {
-                isPlaybackDialogOpen = true
+                showRecordStopConfirmDialog = true
               }
             )
           }
         }
 
-        // Right-Side Layer Panel
-        if (isLayerPanelOpen) {
-          Box(modifier = Modifier.align(Alignment.CenterEnd)) {
-            SketchbookLayerPanel(
-              layers = layers,
-              activeLayerId = activeLayerId,
-              recTargetLayerId = recTargetLayerId,
-              onSelectLayer = { activeLayerId = it },
-              onSetRecTarget = { targetId ->
-                recTargetLayerId = targetId
-                layers.forEach { it.isRecTarget = (it.id == targetId) }
-                recordedStrokesForTarget.clear()
-                isLiveRecording = true
-                recordingElapsedSeconds = 0
-                Toast.makeText(
-                  context,
-                  "রেকর্ডিং শুরু: শুধুমাত্র '${layers.find { it.id == targetId }?.name}' রেকর্ড হবে!",
-                  Toast.LENGTH_SHORT
-                ).show()
-              },
-              onToggleVisibility = { id ->
-                layers.find { it.id == id }?.let { it.visible = !it.visible }
-              },
-              onUpdateOpacity = { id, newOpacity ->
-                layers.find { it.id == id }?.let { it.opacity = newOpacity }
-              },
-              onSelectBackgroundColor = { color ->
-                layers.find { it.type == LayerType.BACKGROUND }?.let {
-                  it.backgroundColor = color
-                }
-              },
-              onAddLayer = {
-                val newL = Layer(name = "Layer ${layers.size + 1}", type = LayerType.DRAWING)
-                layers.add(0, newL)
-                activeLayerId = newL.id
-              },
-              onAddImageLayer = {
-                photoPickerLauncher.launch(
-                  PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+        // 1. Right-Edge Floating Layer Pull-Tab (মোবাইলে সবসময় ডান প্রান্তে সহজে লেয়ার বের করার জন্য হ্যান্ডেল)
+        if (!isLayerPanelOpen) {
+          Box(
+            modifier = Modifier
+              .align(Alignment.CenterEnd)
+              .zIndex(25f)
+              .clip(RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
+              .shadow(elevation = 8.dp)
+              .background(Color(0xFF0F172A))
+              .border(
+                width = 1.5.dp,
+                color = Color(0xFF38BDF8),
+                shape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp)
+              )
+              .clickable { isLayerPanelOpen = true }
+              .padding(horizontal = 8.dp, vertical = 12.dp)
+              .testTag("layer_pull_tab"),
+            contentAlignment = Alignment.Center
+          ) {
+            Column(
+              horizontalAlignment = Alignment.CenterHorizontally,
+              verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+              Icon(
+                imageVector = Icons.Default.Layers,
+                contentDescription = "Open Layers",
+                tint = Color(0xFF38BDF8),
+                modifier = Modifier.size(20.dp)
+              )
+              Text(
+                text = "লেয়ার",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+              )
+              Box(
+                modifier = Modifier
+                  .clip(CircleShape)
+                  .background(Color(0xFF007ACC))
+                  .padding(horizontal = 5.dp, vertical = 1.dp)
+              ) {
+                Text(
+                  text = "${layers.size}",
+                  fontSize = 10.sp,
+                  fontWeight = FontWeight.ExtraBold,
+                  color = Color.White
                 )
-              },
-              onTransformImageLayer = {
-                isImageEditMode = true
-              },
-              onDeleteLayer = { id ->
-                if (layers.size > 1) {
-                  layers.removeAll { it.id == id }
-                  if (activeLayerId == id) activeLayerId = layers.first().id
-                  if (recTargetLayerId == id) recTargetLayerId = layers.first().id
-                }
-              },
-              onColorWheelClick = { isColorWheelOpen = true }
+              }
+              Text(
+                text = "◀",
+                fontSize = 12.sp,
+                color = Color(0xFF38BDF8),
+                fontWeight = FontWeight.Bold
+              )
+            }
+          }
+        }
+
+        // 2. Right-Side Layer Drawer with Backdrop Scrim and Collapse Handle
+        if (isLayerPanelOpen) {
+          Box(modifier = Modifier.fillMaxSize().zIndex(35f)) {
+            // Touch-outside Scrim to close layers
+            Box(
+              modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.25f))
+                .clickable { isLayerPanelOpen = false }
             )
+
+            // Panel with attached collapse handle aligned to CenterEnd
+            Row(
+              modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight(),
+              verticalAlignment = Alignment.CenterVertically
+            ) {
+              // Attached Collapse Tab on the left edge of panel (ট্যাপ করলেই সহজে ভেতরে ঢুকে যাবে)
+              Box(
+                modifier = Modifier
+                  .clip(RoundedCornerShape(topStart = 14.dp, bottomStart = 14.dp))
+                  .shadow(elevation = 6.dp)
+                  .background(Color(0xFF0F172A))
+                  .border(
+                    width = 1.5.dp,
+                    color = Color(0xFF38BDF8),
+                    shape = RoundedCornerShape(topStart = 14.dp, bottomStart = 14.dp)
+                  )
+                  .clickable { isLayerPanelOpen = false }
+                  .padding(horizontal = 6.dp, vertical = 14.dp),
+                contentAlignment = Alignment.Center
+              ) {
+                Column(
+                  horizontalAlignment = Alignment.CenterHorizontally,
+                  verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                  Text("▶", fontSize = 14.sp, color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold)
+                  Text("বন্ধ", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                }
+              }
+
+              // The Layer Panel
+              SketchbookLayerPanel(
+                layers = layers,
+                activeLayerId = activeLayerId,
+                recTargetLayerId = recTargetLayerId,
+                onSelectLayer = { activeLayerId = it },
+                onSetRecTarget = { targetId ->
+                  recTargetLayerId = targetId
+                  layers.forEach { it.isRecTarget = (it.id == targetId) }
+                  recordedStrokesForTarget.clear()
+                  isLiveRecording = true
+                  recordingElapsedSeconds = 0
+                  Toast.makeText(
+                    context,
+                    "রেকর্ডিং শুরু: শুধুমাত্র '${layers.find { it.id == targetId }?.name}' রেকর্ড হবে!",
+                    Toast.LENGTH_SHORT
+                  ).show()
+                },
+                onToggleVisibility = { id ->
+                  layers.find { it.id == id }?.let { it.visible = !it.visible }
+                },
+                onUpdateOpacity = { id, newOpacity ->
+                  layers.find { it.id == id }?.let { it.opacity = newOpacity }
+                },
+                onSelectBackgroundColor = { color ->
+                  layers.find { it.type == LayerType.BACKGROUND }?.let {
+                    it.backgroundColor = color
+                  }
+                },
+                onAddLayer = {
+                  val newL = Layer(name = "Layer ${layers.size + 1}", type = LayerType.DRAWING)
+                  layers.add(0, newL)
+                  activeLayerId = newL.id
+                },
+                onAddImageLayer = {
+                  photoPickerLauncher.launch(
+                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                  )
+                },
+                onTransformImageLayer = {
+                  isImageEditMode = true
+                },
+                onDeleteLayer = { id ->
+                  if (layers.size > 1) {
+                    layers.removeAll { it.id == id }
+                    if (activeLayerId == id) activeLayerId = layers.first().id
+                    if (recTargetLayerId == id) recTargetLayerId = layers.first().id
+                  }
+                },
+                onColorWheelClick = { isColorWheelOpen = true },
+                onClose = { isLayerPanelOpen = false }
+              )
+            }
           }
         }
       }
 
       // 3. Dedicated Bottom Studio Tool Dock (Pencil, Eraser, Move/Pan, Pen, Marker, Hand Color, Record)
       StudioToolDock(
+        modifier = Modifier.fillMaxWidth().zIndex(30f),
         activePencil = activePencil,
         onSelectPencil = { p ->
           activePencil = p
@@ -583,7 +822,7 @@ fun SketchbookAppScreen() {
         targetLayerName = recTargetLayer?.name ?: "Layer",
         onToggleRecord = {
           if (isLiveRecording) {
-            isPlaybackDialogOpen = true
+            showRecordStopConfirmDialog = true
           } else {
             recTargetLayerId = activeLayerId
             layers.forEach { it.isRecTarget = (it.id == activeLayerId) }
@@ -596,22 +835,43 @@ fun SketchbookAppScreen() {
               Toast.LENGTH_LONG
             ).show()
           }
-        }
+        },
+        isLayerPanelOpen = isLayerPanelOpen,
+        layersCount = layers.size,
+        onToggleLayers = { isLayerPanelOpen = !isLayerPanelOpen },
+        onUndo = performUndo,
+        onUndoLongClick = { showUndoHistoryDialog = true }
       )
     }
 
     // 4. Modals & Dialogs
 
-    // Canvas Size Dialog (A4, A5, Square, Custom)
+    // Canvas Size & Background Dialog (A4, A5, Square, Custom, Color, Image)
     if (isCanvasSizeDialogOpen) {
       CanvasSizeDialog(
         currentCanvasSize = currentCanvasSize,
-        onSelectSize = { newSize ->
+        currentCanvasColor = canvasBackgroundColor,
+        currentBackgroundImage = canvasBackgroundImage,
+        onApplyCanvasConfig = { newSize, newColor, clearBgImage ->
           currentCanvasSize = newSize
+          canvasBackgroundColor = newColor
           zoomScale = (720f / newSize.height.coerceAtLeast(newSize.width)).coerceIn(0.2f, 1.2f)
           panOffset = Offset(24f, 32f)
           canvasRotation = 0f
-          Toast.makeText(context, "ক্যানভাস সাইজ: ${newSize.name}", Toast.LENGTH_SHORT).show()
+
+          val bgLayer = layers.find { it.type == LayerType.BACKGROUND }
+          bgLayer?.backgroundColor = newColor
+          if (clearBgImage) {
+            canvasBackgroundImage = null
+            bgLayer?.backgroundImageBitmap = null
+            bgLayer?.backgroundImageUri = null
+          }
+          Toast.makeText(context, "ক্যানভাস সেটআপ ও ব্যাকগ্রাউন্ড সম্পন্ন হয়েছে!", Toast.LENGTH_SHORT).show()
+        },
+        onRequestPickBackgroundImage = {
+          bgPhotoPickerLauncher.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+          )
         },
         onDismiss = { isCanvasSizeDialogOpen = false }
       )
@@ -680,20 +940,23 @@ fun SketchbookAppScreen() {
       ToolsMenuDialog(
         onDismiss = { isToolsMenuOpen = false },
         onRecordClick = {
-          recTargetLayerId = activeLayerId
-          layers.forEach { it.isRecTarget = (it.id == activeLayerId) }
-          recordedStrokesForTarget.clear()
-          recordingElapsedSeconds = 0
-          isLiveRecording = true
-          Toast.makeText(
-            context,
-            "নির্দিষ্ট লেয়ার রেকর্ড শুরু হয়েছে: '${activeLayer?.name}'. এখন এর ওপর ড্র করুন!",
-            Toast.LENGTH_LONG
-          ).show()
+          if (isLiveRecording) {
+            showRecordStopConfirmDialog = true
+          } else {
+            recTargetLayerId = activeLayerId
+            layers.forEach { it.isRecTarget = (it.id == activeLayerId) }
+            recordedStrokesForTarget.clear()
+            recordingElapsedSeconds = 0
+            isLiveRecording = true
+            Toast.makeText(
+              context,
+              "নির্দিষ্ট লেয়ার রেকর্ড শুরু হয়েছে: '${activeLayer?.name}'. এখন এর ওপর ড্র করুন!",
+              Toast.LENGTH_LONG
+            ).show()
+          }
         },
         onClearClick = {
-          activeLayer?.strokes?.clear()
-          Toast.makeText(context, "অ্যাক্টিভ লেয়ার ক্লিয়ার করা হয়েছে", Toast.LENGTH_SHORT).show()
+          showUndoHistoryDialog = true
         },
         onAddTextClick = { isAddTextDialogOpen = true },
         onAddShapeClick = { isAddShapeDialogOpen = true },
@@ -708,7 +971,9 @@ fun SketchbookAppScreen() {
           } else {
             Toast.makeText(context, "প্রথমে একটি ছবি লেয়ার নির্বাচন করুন", Toast.LENGTH_SHORT).show()
           }
-        }
+        },
+        onOpenCanvasSetup = { isCanvasSizeDialogOpen = true },
+        onOpenLayers = { isLayerPanelOpen = true }
       )
     }
 
@@ -759,6 +1024,9 @@ fun SketchbookAppScreen() {
         canvasSize = currentCanvasSize,
         layerName = recTargetLayer?.name ?: "Target Layer",
         recordedStrokes = recordedStrokesForTarget.toList(),
+        canvasColor = canvasBackgroundColor,
+        canvasBgImage = canvasBackgroundImage,
+        layers = layers.toList(),
         onResumeRecording = {
           isPlaybackDialogOpen = false
           isLiveRecording = true
@@ -780,12 +1048,229 @@ fun SketchbookAppScreen() {
           val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_SUBJECT, "Layer Recording: ${recTargetLayer?.name}")
-            putExtra(Intent.EXTRA_TEXT, "Exported isolated layer recording of '${recTargetLayer?.name}' (${recordedStrokesForTarget.size} strokes) from LayerSketch Studio")
+            putExtra(Intent.EXTRA_TEXT, "Exported isolated layer recording of '${recTargetLayer?.name}' (${recordedStrokesForTarget.size} strokes) from mahfujdrawing")
           }
           context.startActivity(Intent.createChooser(shareIntent, "Share Isolated Layer Drawing"))
         },
         onDismiss = {
           isPlaybackDialogOpen = false
+        }
+      )
+    }
+
+    // 1. Safety Modal: Stop / Discard Recording Warning
+    if (showRecordStopConfirmDialog) {
+      AlertDialog(
+        onDismissRequest = { showRecordStopConfirmDialog = false },
+        title = {
+          Text("🎬 রেকর্ডিং নিয়ন্ত্রণ ও সতর্কতা", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        },
+        text = {
+          Text(
+            "আপনার '${recTargetLayer?.name}' লেয়ারের ${recordedStrokesForTarget.size}টি স্ট্রোক রেকর্ড করা হয়েছে (${recordingElapsedSeconds} সেকেন্ড)।\n\nআপনি কি রেকর্ডিং সেভ করে প্রিভিউ দেখতে চান, ড্র চালিয়ে যেতে চান, নাকি বাতিল করে রিসেট করতে চান?",
+            fontSize = 13.sp
+          )
+        },
+        confirmButton = {
+          Button(
+            onClick = {
+              showRecordStopConfirmDialog = false
+              isPlaybackDialogOpen = true
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF007ACC))
+          ) {
+            Text("💾 সেভ ও প্রিভিউ দেখুন", fontSize = 12.sp)
+          }
+        },
+        dismissButton = {
+          Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            OutlinedButton(
+              onClick = {
+                showRecordStopConfirmDialog = false
+                isLiveRecording = false
+                recordedStrokesForTarget.clear()
+                recordingElapsedSeconds = 0
+                Toast.makeText(context, "রেকর্ডিং বাতিল ও রিসেট করা হয়েছে", Toast.LENGTH_SHORT).show()
+              }
+            ) {
+              Text("⚠️ বাতিল ও রিসেট", fontSize = 11.sp, color = Color(0xFFDC2626))
+            }
+            Button(
+              onClick = { showRecordStopConfirmDialog = false },
+              colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
+            ) {
+              Text("▶ ড্র চালিয়ে যান", fontSize = 11.sp)
+            }
+          }
+        }
+      )
+    }
+
+    // 2. Safety Modal: Canvas & History Reset Warning
+    if (showCanvasResetConfirmDialog) {
+      AlertDialog(
+        onDismissRequest = { showCanvasResetConfirmDialog = false },
+        title = {
+          Text("⚠️ ক্যানভাস ও হিস্ট্রি রিসেট", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        },
+        text = {
+          Text(
+            "সতর্কতা: ক্যানভাস রিসেট করলে সমস্ত আনডু/রিডু হিস্ট্রি এবং রেকর্ড করা স্ট্রোকগুলো স্থায়ীভাবে মুছে যাবে। আপনি কি নিশ্চিত?",
+            fontSize = 13.sp
+          )
+        },
+        confirmButton = {
+          Button(
+            onClick = {
+              showCanvasResetConfirmDialog = false
+              undoStack.clear()
+              redoStack.clear()
+              recordedStrokesForTarget.clear()
+              recordingElapsedSeconds = 0
+              isLiveRecording = false
+              Toast.makeText(context, "ক্যানভাস হিস্ট্রি ও রেকর্ডিং রিসেট করা হয়েছে", Toast.LENGTH_SHORT).show()
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+          ) {
+            Text("হ্যাঁ, রিসেট করুন", fontSize = 12.sp)
+          }
+        },
+        dismissButton = {
+          OutlinedButton(onClick = { showCanvasResetConfirmDialog = false }) {
+            Text("বাতিল", fontSize = 12.sp)
+          }
+        }
+      )
+    }
+
+    // 3. Safety Modal: Clear Active Layer Warning
+    if (showClearLayerConfirmDialog) {
+      AlertDialog(
+        onDismissRequest = { showClearLayerConfirmDialog = false },
+        title = {
+          Text("⚠️ লেয়ার ড্রয়িং মুছুন", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        },
+        text = {
+          Text(
+            "সতর্কতা: '${activeLayer?.name}' লেয়ারের সমস্ত অঙ্কিত দাগ মুছে যাবে! আপনি কি মুছে ফেলতে চান?",
+            fontSize = 13.sp
+          )
+        },
+        confirmButton = {
+          Button(
+            onClick = {
+              showClearLayerConfirmDialog = false
+              activeLayer?.strokes?.clear()
+              Toast.makeText(context, "লেয়ার ক্লিয়ার করা হয়েছে", Toast.LENGTH_SHORT).show()
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+          ) {
+            Text("হ্যাঁ, মুছুন", fontSize = 12.sp)
+          }
+        },
+        dismissButton = {
+          OutlinedButton(onClick = { showClearLayerConfirmDialog = false }) {
+            Text("বাতিল", fontSize = 12.sp)
+          }
+        }
+      )
+    }
+
+    // 4. Undo History Dialog: Multi-step & Continuous Undo (আগের একাধিক স্ট্রোক একসাথে মোছার অপশন)
+    if (showUndoHistoryDialog) {
+      AlertDialog(
+        onDismissRequest = { showUndoHistoryDialog = false },
+        title = {
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+          ) {
+            Icon(
+              imageVector = Icons.AutoMirrored.Filled.Undo,
+              contentDescription = "Undo History",
+              tint = Color(0xFF007ACC)
+            )
+            Text(
+              text = "হিস্টোরি আনডু (একাধিক স্ট্রোক মুছুন)",
+              fontSize = 15.sp,
+              fontWeight = FontWeight.Bold,
+              color = Color(0xFF0F172A)
+            )
+          }
+        },
+        text = {
+          Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+              text = "আপনি একসাথে পূর্ববর্তী কতটি ড্রয়িং স্ট্রোক মুছতে চান? নিচের অপশনগুলো থেকে বেছে নিন:",
+              fontSize = 12.5.sp,
+              color = Color(0xFF475569)
+            )
+
+            Button(
+              onClick = {
+                performUndo()
+                showUndoHistoryDialog = false
+              },
+              modifier = Modifier.fillMaxWidth(),
+              colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF1F5F9), contentColor = Color(0xFF1E293B))
+            ) {
+              Text("↩️ ১টি আগের স্ট্রোক মুছুন (Undo 1)")
+            }
+
+            Button(
+              onClick = {
+                performUndoMultiple(3)
+                showUndoHistoryDialog = false
+              },
+              modifier = Modifier.fillMaxWidth(),
+              colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEFF6FF), contentColor = Color(0xFF007ACC))
+            ) {
+              Text("⏪ আগের ৩টি স্ট্রোক মুছুন (Undo 3)")
+            }
+
+            Button(
+              onClick = {
+                performUndoMultiple(5)
+                showUndoHistoryDialog = false
+              },
+              modifier = Modifier.fillMaxWidth(),
+              colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEFF6FF), contentColor = Color(0xFF007ACC))
+            ) {
+              Text("⏪ আগের ৫টি স্ট্রোক মুছুন (Undo 5)")
+            }
+
+            Button(
+              onClick = {
+                performUndoMultiple(10)
+                showUndoHistoryDialog = false
+              },
+              modifier = Modifier.fillMaxWidth(),
+              colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEFF6FF), contentColor = Color(0xFF007ACC))
+            ) {
+              Text("⏮️ আগের ১০টি স্ট্রোক মুছুন (Undo 10)")
+            }
+
+            OutlinedButton(
+              onClick = {
+                performUndoAllOnActiveLayer()
+                showUndoHistoryDialog = false
+              },
+              modifier = Modifier.fillMaxWidth()
+            ) {
+              Text(
+                text = "🗑️ বর্তমান লেয়ারের সব ড্রয়িং মুছুন (Clear Layer)",
+                color = Color(0xFFDC2626),
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp
+              )
+            }
+          }
+        },
+        confirmButton = {},
+        dismissButton = {
+          TextButton(onClick = { showUndoHistoryDialog = false }) {
+            Text("বাতিল", color = Color(0xFF64748B))
+          }
         }
       )
     }

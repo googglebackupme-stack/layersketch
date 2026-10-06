@@ -47,10 +47,14 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.model.CanvasSize
+import com.example.model.Layer
 import com.example.model.PencilStroke
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -60,6 +64,9 @@ fun RecordingPlaybackDialog(
   canvasSize: CanvasSize,
   layerName: String,
   recordedStrokes: List<PencilStroke>,
+  canvasColor: Color = Color.White,
+  canvasBgImage: ImageBitmap? = null,
+  layers: List<Layer> = emptyList(),
   onResumeRecording: () -> Unit,
   onRestartRecording: () -> Unit,
   onFinishRecording: () -> Unit,
@@ -73,6 +80,7 @@ fun RecordingPlaybackDialog(
   var playbackProgress by remember { mutableFloatStateOf(1.0f) }
   var isSavingToGallery by remember { mutableStateOf(false) }
   var isSavedSuccess by remember { mutableStateOf(false) }
+  var showRestartConfirm by remember { mutableStateOf(false) }
 
   val totalStrokes = recordedStrokes.size
   val visibleStrokeCount = (totalStrokes * playbackProgress).toInt().coerceIn(0, totalStrokes)
@@ -144,6 +152,18 @@ fun RecordingPlaybackDialog(
         contentAlignment = Alignment.Center
       ) {
         Canvas(modifier = Modifier.fillMaxSize().padding(6.dp)) {
+          // 1. Draw canvas background color
+          drawRect(color = canvasColor)
+
+          // 2. Draw canvas background image
+          canvasBgImage?.let { bgBmp ->
+            drawImage(
+              image = bgBmp,
+              dstOffset = IntOffset.Zero,
+              dstSize = IntSize(size.width.toInt(), size.height.toInt())
+            )
+          }
+
           val scale = size.width / canvasSize.width
           val strokesToDraw = recordedStrokes.take(visibleStrokeCount)
 
@@ -156,7 +176,7 @@ fun RecordingPlaybackDialog(
               }
               drawPath(
                 path = path,
-                color = if (stroke.isEraser) Color(0xFFF8FAFC) else stroke.color,
+                color = if (stroke.isEraser) canvasColor else stroke.color,
                 style = Stroke(width = stroke.width * scale, cap = StrokeCap.Round)
               )
             }
@@ -215,7 +235,7 @@ fun RecordingPlaybackDialog(
 
       Spacer(modifier = Modifier.height(6.dp))
 
-      // PRIMARY ACTION 2: SAVE VIDEO TO GALLERY (Matches exact canvas size)
+      // PRIMARY ACTION 2: SAVE VIDEO TO GALLERY (Matches exact canvas size, color & background)
       Button(
         onClick = {
           if (!isSavingToGallery) {
@@ -226,7 +246,10 @@ fun RecordingPlaybackDialog(
                 layerName = layerName,
                 strokes = recordedStrokes,
                 paperWidth = canvasSize.width.toInt(),
-                paperHeight = canvasSize.height.toInt()
+                paperHeight = canvasSize.height.toInt(),
+                layers = layers,
+                canvasColor = canvasColor,
+                canvasBgImage = canvasBgImage
               )
               isSavingToGallery = false
               isSavedSuccess = true
@@ -257,13 +280,19 @@ fun RecordingPlaybackDialog(
 
       Spacer(modifier = Modifier.height(6.dp))
 
-      // SECONDARY ACTIONS: Restart recording, Share, Finish
+      // SECONDARY ACTIONS: Restart recording (with warning modal), Share, Finish
       Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(6.dp)
       ) {
         OutlinedButton(
-          onClick = onRestartRecording,
+          onClick = {
+            if (recordedStrokes.isNotEmpty()) {
+              showRestartConfirm = true
+            } else {
+              onRestartRecording()
+            }
+          },
           modifier = Modifier.weight(1f).height(34.dp),
           shape = RoundedCornerShape(6.dp)
         ) {
@@ -293,6 +322,35 @@ fun RecordingPlaybackDialog(
           Text("শেষ", fontSize = 10.sp, color = Color.White)
         }
       }
+    }
+
+    // Warning confirmation modal to prevent accidental reset of recording
+    if (showRestartConfirm) {
+      androidx.compose.material3.AlertDialog(
+        onDismissRequest = { showRestartConfirm = false },
+        title = {
+          Text("⚠️ রেকর্ড রিসেট সতর্কবার্তা", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        },
+        text = {
+          Text("বর্তমান রেকর্ডিংয়ের ${recordedStrokes.size}টি স্ট্রোক মুছে নতুন রেকর্ড শুরু হবে। আপনি কি নিশ্চিত?", fontSize = 12.sp)
+        },
+        confirmButton = {
+          Button(
+            onClick = {
+              showRestartConfirm = false
+              onRestartRecording()
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626))
+          ) {
+            Text("হ্যাঁ, রিসেট করুন", fontSize = 11.sp)
+          }
+        },
+        dismissButton = {
+          OutlinedButton(onClick = { showRestartConfirm = false }) {
+            Text("বাতিল", fontSize = 11.sp)
+          }
+        }
+      )
     }
   }
 }

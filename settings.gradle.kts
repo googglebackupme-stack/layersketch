@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "LayerSketch Studio"
+rootProject.name = "mahfujdrawing"
 
 include(":app")

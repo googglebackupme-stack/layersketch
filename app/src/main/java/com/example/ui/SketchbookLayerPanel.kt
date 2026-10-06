@@ -24,8 +24,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Opacity
 import androidx.compose.material.icons.filled.Transform
 import androidx.compose.material.icons.filled.Visibility
@@ -39,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -48,6 +51,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.example.model.Layer
 import com.example.model.LayerType
 
@@ -66,7 +70,8 @@ fun SketchbookLayerPanel(
   onAddImageLayer: () -> Unit,
   onTransformImageLayer: () -> Unit,
   onDeleteLayer: (String) -> Unit,
-  onColorWheelClick: () -> Unit
+  onColorWheelClick: () -> Unit,
+  onClose: () -> Unit = {}
 ) {
   val activeLayer = layers.find { it.id == activeLayerId }
 
@@ -81,37 +86,93 @@ fun SketchbookLayerPanel(
 
   Column(
     modifier = modifier
-      .width(112.dp)
+      .width(172.dp)
       .fillMaxHeight()
+      .zIndex(35f)
+      .shadow(elevation = 10.dp)
       .background(Color.White)
-      .border(0.5.dp, Color(0xFFD1D5DB))
-      .padding(vertical = 4.dp),
+      .border(1.dp, Color(0xFFCBD5E1)),
     horizontalAlignment = Alignment.CenterHorizontally
   ) {
+    // 0. Top Header Bar with Title and Close Button (মোবাইলে সহজে বন্ধ করার জন্য)
+    Row(
+      modifier = Modifier
+        .fillMaxWidth()
+        .height(44.dp)
+        .background(Color(0xFF0F172A))
+        .padding(horizontal = 8.dp),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp)
+      ) {
+        Icon(
+          imageVector = Icons.Default.Layers,
+          contentDescription = "Layers",
+          tint = Color(0xFF38BDF8),
+          modifier = Modifier.size(17.dp)
+        )
+        Text(
+          text = "লেয়ারসমূহ (${layers.size})",
+          fontSize = 12.sp,
+          fontWeight = FontWeight.Bold,
+          color = Color.White
+        )
+      }
+
+      IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
+        Icon(
+          imageVector = Icons.Default.Close,
+          contentDescription = "Close Layers",
+          tint = Color(0xFFE2E8F0),
+          modifier = Modifier.size(18.dp)
+        )
+      }
+    }
+
     // 1. Top Add Actions (+ Layer, + Photo)
     Row(
       modifier = Modifier
         .fillMaxWidth()
-        .height(44.dp),
-      horizontalArrangement = Arrangement.SpaceEvenly,
+        .background(Color(0xFFF8FAFC))
+        .padding(horizontal = 6.dp, vertical = 6.dp),
+      horizontalArrangement = Arrangement.spacedBy(6.dp),
       verticalAlignment = Alignment.CenterVertically
     ) {
-      IconButton(onClick = onAddLayer, modifier = Modifier.size(34.dp)) {
-        Icon(
-          imageVector = Icons.Default.Add,
-          contentDescription = "Add Layer",
-          tint = Color(0xFF334155),
-          modifier = Modifier.size(22.dp)
-        )
+      // Add Blank Layer Button
+      Box(
+        modifier = Modifier
+          .weight(1f)
+          .height(30.dp)
+          .clip(RoundedCornerShape(6.dp))
+          .background(Color(0xFFEFF6FF))
+          .border(1.dp, Color(0xFFBFDBFE), RoundedCornerShape(6.dp))
+          .clickable(onClick = onAddLayer),
+        contentAlignment = Alignment.Center
+      ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+          Icon(Icons.Default.Add, contentDescription = "Add", tint = Color(0xFF007ACC), modifier = Modifier.size(14.dp))
+          Text("+ লেয়ার", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF007ACC))
+        }
       }
 
-      IconButton(onClick = onAddImageLayer, modifier = Modifier.size(34.dp)) {
-        Icon(
-          imageVector = Icons.Default.AddPhotoAlternate,
-          contentDescription = "Add Image Layer",
-          tint = Color(0xFF16A34A),
-          modifier = Modifier.size(20.dp)
-        )
+      // Add Photo Layer Button
+      Box(
+        modifier = Modifier
+          .weight(1f)
+          .height(30.dp)
+          .clip(RoundedCornerShape(6.dp))
+          .background(Color(0xFFF0FDF4))
+          .border(1.dp, Color(0xFFBBF7D0), RoundedCornerShape(6.dp))
+          .clickable(onClick = onAddImageLayer),
+        contentAlignment = Alignment.Center
+      ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+          Icon(Icons.Default.AddPhotoAlternate, contentDescription = "Add Photo", tint = Color(0xFF16A34A), modifier = Modifier.size(13.dp))
+          Text("+ ছবি", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
+        }
       }
     }
 
